@@ -1,0 +1,7 @@
+main.py
+pyproject.toml
+shared_autonomy.egg-info/PKG-INFO
+shared_autonomy.egg-info/SOURCES.txt
+shared_autonomy.egg-info/dependency_links.txt
+shared_autonomy.egg-info/requires.txt
+shared_autonomy.egg-info/top_level.txt

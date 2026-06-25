@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shared-autonomy"
+version = "0.1.0"
+requires-python = "==3.13.3"
+dependencies = [
+    "pygame==2.6.1",
+]
+
+[tool.setuptools]
+py-modules = ["main"]
