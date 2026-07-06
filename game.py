@@ -39,7 +39,7 @@ BY EOD:
     napkin needs to go before fork, spoon and knife go to the left of the plate, on top of placemat.
 
   TODO:
-    - Create an agent asking system  -> DONE below (reactive / "ask which option" variant)
+    - Get the buttons nice and make the task flow an actual thing.
 """
 
 
