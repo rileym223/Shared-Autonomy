@@ -186,31 +186,26 @@ class Sprite(pygame.sprite.Sprite):
 
 
 def can_place_item(item, sprite_group) -> bool:
-    """Enforce the placement order for the task. Tiers go as follows -
-        - Placemat goes down first (always true)
-        - Then are able to place down plate and napkin
-        - then can place the fork, knife and spoon, and cup """
-    # if item.name == "Placemat":
-    #     return True
+    """Enforce the placement order for the table-setting task."""
+    if item.name == "Placemat":
+        return True
 
-    # if item.name in {"Plate", "Napkin"}:
-    #     placemat = None
-    #     for sprite in sprite_group:
-    #         if sprite.name == "Placemat":
-    #             placemat = sprite
-    #             break
+    placemat = next((sprite for sprite in sprite_group if sprite.name == "Placemat"), None)
+    if placemat is None or not placemat.snapped:
+        return False
 
-    # if item.name in {"Fork", "Knife Spoon"}:
-    #     placemat = None
-    #     for sprite in sprite_group:
-    #         if sprite.name == "Placemat":
-    #             placemat = sprite
-    #             break
+    if item.name in {"Plate", "Napkin"}:
+        return True
 
-    #     if placemat is None or not placemat.snapped:
-    #         return False
+    if item.name in {"Fork", "Knife", "Spoon"}:
+        napkin = next((sprite for sprite in sprite_group if sprite.name == "Napkin"), None)
+        return napkin is not None and napkin.snapped
 
-    #     return placemat.rect.colliderect(item.rect)
+    if item.name == "Cup":
+        plate = next((sprite for sprite in sprite_group if sprite.name == "Plate"), None)
+        return plate is not None and plate.snapped
+    
+
 
     return True
 
@@ -279,18 +274,18 @@ BackGround = Background('assests/floor2png.png', [0, 0])
 
 sprite_list = pygame.sprite.LayeredUpdates()
 
-# plate = Sprite(150, 150, "platepng.png", name="Plate")
-# plate.rect.y = 200
-# plate.rect.x = 300
-# sprite_list.add(plate)
-# sprite_list.change_layer(sprite=plate, new_layer=3)
+plate = Sprite(pygame.Vector2(265,218), 200, 150, "platepng.png", name="Plate")
+plate.rect.y = 200
+plate.rect.x = 300
+sprite_list.add(plate)
+sprite_list.change_layer(sprite=plate, new_layer=3)
 
 
-# spoon = Sprite(50, 50, "spoonpng.png", name="Spoon")
-# spoon.rect.x = 300
-# spoon.rect.y = 200
-# sprite_list.add(spoon)
-# sprite_list.change_layer(sprite=spoon, new_layer=3)
+spoon = Sprite(pygame.Vector2(450,248), 100, 100, "spoonpng.png", name="Spoon")
+spoon.rect.x = 300
+spoon.rect.y = 200
+sprite_list.add(spoon)
+sprite_list.change_layer(sprite=spoon, new_layer=3)
 
 # # Fork and knife are held by the agent to start: place them inside the
 # # robot-only zone (x >= 600, y <= 600) so start_drag already refuses to
@@ -302,18 +297,18 @@ sprite_list.add(fork)
 sprite_list.change_layer(sprite=fork, new_layer=3)
 
 
-knife = Sprite(pygame.Vector2(427,250),100, 100, "knifepng.png", name="Knife")
+knife = Sprite(pygame.Vector2(420,248),100, 100, "knifepng.png", name="Knife")
 knife.rect.x = 800
 knife.rect.y = 100
 sprite_list.add(knife)
 sprite_list.change_layer(sprite=knife, new_layer=3)
 
 
-# cup = Sprite(50, 50, "cuppng.png", name="Cup")
-# cup.rect.x = 500
-# cup.rect.y = 475
-# sprite_list.add(cup)
-# sprite_list.change_layer(sprite=cup, new_layer=3)
+cup = Sprite(pygame.Vector2(521, 173), 50, 50, "cuppng.png", name="Cup")
+cup.rect.x = 500
+cup.rect.y = 475
+sprite_list.add(cup)
+sprite_list.change_layer(sprite=cup, new_layer=3)
 
 napkin = Sprite(pygame.Vector2(163,234), 100,125, "napkinpng.png", name="Napkin")
 napkin.rect.x = 100
