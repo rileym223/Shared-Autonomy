@@ -49,6 +49,8 @@ BY EOD:
 pygame.init()
 pygamepopup.init()
 
+pygamepopup.configuration.set_info_box_background("Default/button_square_header_small_rectangle_screws.png")
+
 
 class ResponiveAgent:
     """Reactive, 'ask which option' agent.
@@ -76,7 +78,7 @@ class ResponiveAgent:
             return
 
         self.choice_buttons = []
-        start_x = 20
+        start_x = 700
         start_y = 650
         button_w = 220
         button_h = 46
@@ -144,6 +146,15 @@ class Sprite(pygame.sprite.Sprite):
     def __init__(self, goal: pygame.Vector2, height, width, asset, name=None):
         super().__init__()
 
+        self.popup = InfoBox(
+            "Item not dropped in the correct sequence action blocked",
+            [[]],
+            element_linked = pygame.Rect(0,0,600,600),
+            position=(0, 200),
+            width=600,
+            has_close_button=True,
+            background_path="Default/bar_round_large.png"
+        )
         self.snapped = False
         self.snap_radius =15
         self.goal = goal
@@ -179,6 +190,7 @@ class Sprite(pygame.sprite.Sprite):
             else:
                 self.rect.topleft = self.original_position
                 self.stop_drag()
+                menu_manager.open_menu(self.popup)
 
     def check_stop(self) -> bool:
         dist = math.hypot(self.rect.x - self.goal.x, self.rect.y - self.goal.y)
@@ -204,17 +216,17 @@ def can_place_item(item, sprite_group) -> bool:
     if item.name == "Cup":
         plate = next((sprite for sprite in sprite_group if sprite.name == "Plate"), None)
         return plate is not None and plate.snapped
-    
+
 
 
     return True
 
 
-screen = pygame.display.set_mode((1200, 850))
+screen = pygame.display.set_mode((1200, 840))
 
 try:
     bg_raw = pygame.image.load("assests/floorpng.png").convert_alpha()
-    background = pygame.transform.scale(bg_raw, (1200, 850))
+    background = pygame.transform.scale(bg_raw, (1200, 800))
 except pygame.error as e:
     print(f"Error loading image: {e}")
     sys.exit()
@@ -267,8 +279,9 @@ class myButton:
                 return True
         return False
 
-
-BackGround = Background('assests/floor2png.png', [0, 0])
+# scaled_floor = pygame.transform.scale('assests/floor.png',1200, 850)
+# pygame.image.save(scaled_floor, "scaledfloor.png")
+BackGround = Background('assests/bigfloor.png', [0, 0])
 
 
 
@@ -421,8 +434,8 @@ while running:
     screen.fill((156, 148, 146))
     screen.blit(BackGround.image, BackGround.rect)
 
-    blues1 = pygame.draw.rect(screen, (0, 0, 255), (0, 600, 1200, 250), width=2, border_radius=-1)
-    pygame.draw.rect(screen, (0, 0, 0), (0, 0, 600, 600), width=2, border_radius=-1)
+    # blues1 = pygame.draw.rect(screen, (0, 0, 255), (0, 600, 1200, 250), width=2, border_radius=-1)
+    # pygame.draw.rect(screen, (0, 0, 0), (0, 0, 600, 600), width=2, border_radius=-1)
     pygame.draw.rect(screen, (255, 0, 0), (600, 0, 600, 600), width=2, border_radius=-1)
 
     sprite_list.update()
