@@ -281,20 +281,20 @@ class myButton:
 
 # scaled_floor = pygame.transform.scale('assests/floor.png',1200, 850)
 # pygame.image.save(scaled_floor, "scaledfloor.png")
-BackGround = Background('assests/bigfloor.png', [0, 0])
+BackGround = Background('assests/bigfloorv3.png', [0, 0])
 
 
 
 sprite_list = pygame.sprite.LayeredUpdates()
 
-plate = Sprite(pygame.Vector2(265,218), 200, 150, "platepng.png", name="Plate")
+plate = Sprite(pygame.Vector2(357,644), 100, 75, "platepng.png", name="Plate")
 plate.rect.y = 200
 plate.rect.x = 300
 sprite_list.add(plate)
 sprite_list.change_layer(sprite=plate, new_layer=3)
 
 
-spoon = Sprite(pygame.Vector2(450,248), 100, 100, "spoonpng.png", name="Spoon")
+spoon = Sprite(pygame.Vector2(450,654), 60, 60, "spoonpng.png", name="Spoon")
 spoon.rect.x = 300
 spoon.rect.y = 200
 sprite_list.add(spoon)
@@ -303,18 +303,24 @@ sprite_list.change_layer(sprite=spoon, new_layer=3)
 # # Fork and knife are held by the agent to start: place them inside the
 # # robot-only zone (x >= 600, y <= 600) so start_drag already refuses to
 # # let the player pull them out directly.
-fork = Sprite(pygame.Vector2(148,248),100, 100, "forkpng.png", name="Fork")
+fork = Sprite(pygame.Vector2(306,651),60, 60, "forkpng.png", name="Fork")
 fork.rect.x = 700
 fork.rect.y = 100
 sprite_list.add(fork)
 sprite_list.change_layer(sprite=fork, new_layer=3)
 
 
-knife = Sprite(pygame.Vector2(420,248),100, 100, "knifepng.png", name="Knife")
+knife = Sprite(pygame.Vector2(430,654),60, 60, "knifepng.png", name="Knife")
 knife.rect.x = 800
 knife.rect.y = 100
 sprite_list.add(knife)
 sprite_list.change_layer(sprite=knife, new_layer=3)
+
+robot = Sprite(pygame.Vector2(200,248),200, 175, "Armature_Idle_00.png", name="Robot")
+robot.rect.x = 100
+robot.rect.y = 100
+sprite_list.add(robot)
+sprite_list.change_layer(sprite=robot, new_layer=0)
 
 
 cup = Sprite(pygame.Vector2(521, 173), 50, 50, "cuppng.png", name="Cup")
@@ -323,25 +329,25 @@ cup.rect.y = 475
 sprite_list.add(cup)
 sprite_list.change_layer(sprite=cup, new_layer=3)
 
-napkin = Sprite(pygame.Vector2(163,234), 100,125, "napkinpng.png", name="Napkin")
+napkin = Sprite(pygame.Vector2(308,650), 60,65, "napkinpng.png", name="Napkin")
 napkin.rect.x = 100
 napkin.rect.y = 100
 sprite_list.add(napkin)
 sprite_list.change_layer(sprite=napkin, new_layer=2)
 
 
-placemat = Sprite(pygame.Vector2(155,198),400, 200, "placematpng.png", name="Placemat")
+placemat = Sprite(pygame.Vector2(303,633),200, 100, "placematpng.png", name="Placemat")
 placemat.rect.x = 100
 placemat.rect.y = 100
 sprite_list.add(placemat)
 sprite_list.change_layer(sprite=placemat, new_layer=1)
 
 
-table = Sprite(pygame.Vector2(155,198),500, 400, "woodpng.png", name="Table")
-table.rect.x = 100
-table.rect.y = 100
-sprite_list.add(table)
-sprite_list.change_layer(sprite=table, new_layer=0)
+# table = Sprite(pygame.Vector2(155,198),500, 400, "woodpng.png", name="Table")
+# table.rect.x = 100
+# table.rect.y = 100
+# sprite_list.add(table)
+# sprite_list.change_layer(sprite=table, new_layer=0)
 
 
 pygame.font.match_font(name="Kenney Future Narrow")
@@ -387,7 +393,7 @@ while running:
             else:
                 clicked_sprite = None
                 for sprite in sprite_list:
-                    if sprite is table or getattr(sprite, "snapped", False): 
+                    if getattr(sprite, "snapped", False): 
                         continue
                     if sprite.rect.collidepoint(event.pos):
                         clicked_sprite = sprite
