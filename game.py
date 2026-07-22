@@ -158,6 +158,8 @@ class Sprite(pygame.sprite.Sprite):
         self.snapped = False
         self.snap_radius =15
         self.goal = goal
+        self.height = height
+        self.width = width
         self.image = pygame.image.load(os.path.join("assests", asset)).convert_alpha()
         self.image = pygame.transform.scale(self.image, (height, width))
         self.rect = self.image.get_rect()
@@ -173,6 +175,13 @@ class Sprite(pygame.sprite.Sprite):
         self.dragging = True
         self.original_position = pygame.Vector2(self.rect.topleft)
         self.drag_offset = pygame.Vector2(mouse_pos) - pygame.Vector2(self.rect.topleft)
+
+
+        # If the player begins the drag, check to see if the star drag is true, if it is, draw green
+        # sqaure or whatever around the goal location, if it is not draw a red one. 
+        
+    def get_rect(self) -> tuple:
+        return(self.goal[0], self.goal[1], self.height, self.width)
 
     def stop_drag(self) -> None:
         self.dragging = False
@@ -230,6 +239,15 @@ try:
 except pygame.error as e:
     print(f"Error loading image: {e}")
     sys.exit()
+
+
+# Helper functin to draw rect
+def draw_alpha_rect(screen, color: pygame.Color, rect):
+    surf = pygame.Surface((rect[2], rect[3]), pygame.SRCALPHA)
+    surf.fill(color)
+    screen.blit(surf, (rect[0], rect[1]))
+
+
 
 
 # Source - https://stackoverflow.com/a/28005796
@@ -376,6 +394,8 @@ Notibox = InfoBox(
 
 running = True
 clock = pygame.time.Clock()
+highlight_rect = None
+highlight_color = pygame.Color(0, 220, 0, 50)
 
 while running:
     dt = clock.tick(60) / 1000  # seconds since last frame, needed for agent movement speed
@@ -407,6 +427,8 @@ while running:
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
             if dragging_sprite:
                 dragging_sprite.stop_drag()
+                highlight_rect = None
+                highlight_color = pygame.Color(0,0,0,0)
                 print(f"{dragging_sprite.name} final position: ({dragging_sprite.rect.x}, {dragging_sprite.rect.y})")
                 dragging_sprite = None
         elif event.type == pygame.MOUSEMOTION:
@@ -414,6 +436,18 @@ while running:
                 for button in agent.choice_buttons:
                     button.handle_event(event)
             if dragging_sprite:
+                if can_place_item(dragging_sprite, sprite_list):
+                    # pygame.draw.rect(screen, pygame.Color(0,220,0,a=0), dragging_sprite.get_rect())
+                    # draw_alpha_rect(screen, pygame.Color(0,220,0,a=50),  dragging_sprite.get_rect())
+                    # pygame.display.flip()
+                    highlight_color = pygame.Color(0, 220, 0, 50)
+                    highlight_rect = dragging_sprite.get_rect()
+                    
+                    print("show green")
+                elif not can_place_item(dragging_sprite, sprite_list):
+                    highlight_color = pygame.Color(220, 0, 0, 50)
+                    highlight_rect = dragging_sprite.get_rect()
+                    print("show red here")
                 dragging_sprite.drag(event.pos)
             if not dragging_sprite and not agent.is_menu_open:
                 menu_manager.motion(event.pos)
@@ -437,8 +471,9 @@ while running:
     elif not out_of_bounds and menu_manager.active_menu is Notibox:
         menu_manager.close_active_menu()
 
-    screen.fill((156, 148, 146))
+    # screen.fill((156, 148, 146))
     screen.blit(BackGround.image, BackGround.rect)
+    
 
     # blues1 = pygame.draw.rect(screen, (0, 0, 255), (0, 600, 1200, 250), width=2, border_radius=-1)
     # pygame.draw.rect(screen, (0, 0, 0), (0, 0, 600, 600), width=2, border_radius=-1)
@@ -446,6 +481,8 @@ while running:
 
     sprite_list.update()
     sprite_list.draw(screen)
+    if highlight_rect:
+        draw_alpha_rect(screen, highlight_color, highlight_rect)
     agent.draw_choice_buttons(screen)
     menu_manager.display()
    
