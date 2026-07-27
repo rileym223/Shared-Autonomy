@@ -58,13 +58,16 @@ class ResponiveAgent:
     Holds a set of items in the robot-only zone that the player cannot
     drag out directly. Pressing C opens a menu listing those items; picking
     one starts the agent moving that item to the goal location (the table).
+
+    ADD: add a sprite attached to the agent, in which will drive to the sprite and attach itself to it and then go to the 
     """
 
-    def __init__(self, held_items, goal_location, menu_manager, speed=350):
+    def __init__(self, held_items, goal_location, menu_manager, sprite: Sprite, speed=350):
         self.held_items = list(held_items)   # Sprites currently blocked in robot space
         self.goal_location = pygame.Vector2(goal_location)
         self.menu_manager = menu_manager
         self.speed = speed                   # px/sec for the delivery animation
+        self.sprite = sprite
 
         self.choice_box = None
         self.choice_buttons = []
@@ -326,6 +329,18 @@ fork.rect.x = 700
 fork.rect.y = 100
 sprite_list.add(fork)
 sprite_list.change_layer(sprite=fork, new_layer=3)
+
+person = Sprite(pygame.Vector2(306,651),60, 60, "person011.png", name="person")
+person.rect.x = 300
+person.rect.y = 100
+sprite_list.add(person)
+sprite_list.change_layer(sprite=person, new_layer=3)
+
+salt = Sprite(pygame.Vector2(306,651),60, 60, "salt.png", name="Salt")
+salt.rect.x = 700
+salt.rect.y = 100
+sprite_list.add(salt)
+sprite_list.change_layer(sprite=salt, new_layer=3)
 
 
 knife = Sprite(pygame.Vector2(430,654),60, 60, "knifepng.png", name="Knife")
