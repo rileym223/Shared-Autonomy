@@ -52,28 +52,89 @@ pygamepopup.init()
 pygamepopup.configuration.set_info_box_background("Default/button_square_header_small_rectangle_screws.png")
 
 
+# Ordered floor path tuned to the kitchen background.
+# Edit these points to match walkable floor in bigfloorv3.png.
+FLOOR_WAYPOINTS = [
+    (310, 490),
+(809, 335),
+(1014, 327),
+(1029, 229),
+(1019, 132),
+(925, 135),
+(784, 132),
+(688, 134),
+(614, 130),
+(513, 134), 
+(452, 133),
+(438, 210),
+(438, 255),
+(373, 299),
+(303, 359),
+(310, 418),
+(364, 475),
+(484, 498),
+(635, 517),
+(698, 535),
+(703, 594),
+(703, 656),
+(710, 689),
+(766, 707),
+]
+
+# (310, 490),
+# (809, 335),
+# (1014, 327),
+# (1029, 229),
+# (1019, 132),
+# (925, 135),
+# (784, 132),
+# (688, 134),
+# (614, 130),
+# (513, 134), 
+# (452, 133),
+# (438, 210),
+# (438, 255)
+# (373, 299),
+# (303, 359),
+# (310, 418),
+# (364, 475),
+# (484, 498),
+# (635, 517),
+# (698, 535),
+# (703, 594),
+# (703, 656),
+# (710, 689),
+# (766, 707),
+
+
 class ResponiveAgent:
     """Reactive, 'ask which option' agent.
 
     Holds a set of items in the robot-only zone that the player cannot
     drag out directly. Pressing C opens a menu listing those items; picking
-    one starts the agent moving that item to the goal location (the table).
-
-    ADD: add a sprite attached to the agent, in which will drive to the sprite and attach itself to it and then go to the 
+    one makes the robot drive along FLOOR_WAYPOINTS to the item, grab it,
+    then follow waypoints to the goal location.
     """
 
-    def __init__(self, held_items, goal_location, menu_manager, sprite: Sprite, speed=350):
+    PHASE_IDLE = "idle"
+    PHASE_TO_ITEM = "to_item"
+    PHASE_TO_GOAL = "to_goal"
+
+    def __init__(self, held_items, goal_location, menu_manager, robot, waypoints=None, speed=350):
         self.held_items = list(held_items)   # Sprites currently blocked in robot space
         self.goal_location = pygame.Vector2(goal_location)
         self.menu_manager = menu_manager
         self.speed = speed                   # px/sec for the delivery animation
-        self.sprite = sprite
+        self.robot = robot
+        self.waypoints = [pygame.Vector2(p) for p in (waypoints or FLOOR_WAYPOINTS)]
 
         self.choice_box = None
         self.choice_buttons = []
         self.active_item = None              # item currently being delivered
         self.is_delivering = False
-
+        self.phase = self.PHASE_IDLE
+        self.carry_offset = pygame.Vector2(0, 0)
+        self.path_queue = []                 # Vector2 targets to visit in order
 
     def call(self):
         """Show custom selection buttons in the bottom-left blue area."""
@@ -112,6 +173,8 @@ class ResponiveAgent:
         self.held_items.remove(item)
         self.active_item = item
         self.is_delivering = True
+        self.phase = self.PHASE_TO_ITEM
+        self.path_queue = self._build_path(item.rect.topleft)
         self.choice_buttons = []
         self.choice_box = None
 
@@ -123,22 +186,90 @@ class ResponiveAgent:
         self.choice_buttons = []
         self.choice_box = None
 
+    def _nearest_waypoint_index(self, pos):
+        return min(
+            range(len(self.waypoints)),
+            key=lambda i: (self.waypoints[i] - pos).length_squared(),
+        )
+
+    def _build_path(self, destination):
+        """Build a queue: along waypoints from robot toward destination, then destination."""
+        start = pygame.Vector2(self.robot.rect.topleft)
+        dest = pygame.Vector2(destination)
+
+        if not self.waypoints:
+            return [dest]
+
+        i_start = self._nearest_waypoint_index(start)
+        i_end = self._nearest_waypoint_index(dest)
+
+        if i_start <= i_end:
+            route = self.waypoints[i_start : i_end + 1]
+        else:
+            route = list(reversed(self.waypoints[i_end : i_start + 1]))
+
+        path = []
+        for wp in route:
+            if (wp - start).length() > 12:
+                path.append(pygame.Vector2(wp))
+
+        if not path or (path[-1] - dest).length() > 4:
+            path.append(dest)
+        else:
+            path[-1] = dest
+
+        return path
+
+    def _move_robot_toward(self, target, dt):
+        """Move the robot toward target. Returns remaining distance."""
+        current = pygame.Vector2(self.robot.rect.topleft)
+        direction = target - current
+        dist = direction.length()
+        if dist < 4:
+            self.robot.rect.topleft = target
+            return 0
+
+        step = direction.normalize() * min(self.speed * dt, dist)
+        self.robot.rect.topleft = current + step
+        return (target - pygame.Vector2(self.robot.rect.topleft)).length()
+
+    def _follow_path(self, dt):
+        """Advance along path_queue. Returns True when the final point is reached."""
+        if not self.path_queue:
+            return True
+
+        remaining = self._move_robot_toward(self.path_queue[0], dt)
+        if remaining < 4:
+            self.path_queue.pop(0)
+            if not self.path_queue:
+                return True
+        return False
+
     def update(self, dt):
         if not self.is_delivering or self.active_item is None:
             return
 
-        current = pygame.Vector2(self.active_item.rect.topleft)
-        direction = self.goal_location - current
-        dist = direction.length()
+        if self.phase == self.PHASE_TO_ITEM:
+            if self._follow_path(dt):
+                # Grab: keep the item's offset relative to the robot so it rides along
+                self.carry_offset = (
+                    pygame.Vector2(self.active_item.rect.topleft)
+                    - pygame.Vector2(self.robot.rect.topleft)
+                )
+                self.phase = self.PHASE_TO_GOAL
+                self.path_queue = self._build_path(self.goal_location)
 
-        if dist < 4:
-            self.active_item.rect.topleft = self.goal_location
-            self.active_item = None
-            self.is_delivering = False
-            return
-
-        step = direction.normalize() * min(self.speed * dt, dist)
-        self.active_item.rect.topleft = current + step
+        elif self.phase == self.PHASE_TO_GOAL:
+            done = self._follow_path(dt)
+            self.active_item.rect.topleft = (
+                pygame.Vector2(self.robot.rect.topleft) + self.carry_offset
+            )
+            if done:
+                self.active_item.rect.topleft = self.goal_location
+                self.active_item = None
+                self.is_delivering = False
+                self.phase = self.PHASE_IDLE
+                self.path_queue = []
 
     @property
     def is_menu_open(self):
@@ -172,7 +303,7 @@ class Sprite(pygame.sprite.Sprite):
         self.original_position = pygame.Vector2(self.rect.topleft)
 
     def start_drag(self, mouse_pos: tuple[int, int]) -> None:
-        if self.snapped or (mouse_pos[0] >= 600 and mouse_pos[1] <= 600):
+        if self.name == "Robot" or self.snapped or (mouse_pos[0] >= 600 and mouse_pos[1] <= 600):
             self.dragging = False
             return
         self.dragging = True
@@ -396,6 +527,7 @@ agent = ResponiveAgent(
     held_items=[fork, knife],
     goal_location=(750, 700),
     menu_manager=menu_manager,
+    robot=robot,
 )
 
 Notibox = InfoBox(
@@ -419,6 +551,7 @@ while running:
         if event.type == pygame.QUIT:
             running = False
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            print(f"Mouse clicked at: {event.pos}")
             if agent.is_menu_open:
                 for button in agent.choice_buttons:
                     if button.handle_event(event):
