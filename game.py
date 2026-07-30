@@ -55,31 +55,27 @@ pygamepopup.configuration.set_info_box_background("Default/button_square_header_
 # Ordered floor path tuned to the kitchen background.
 # Edit these points to match walkable floor in bigfloorv3.png.
 FLOOR_WAYPOINTS = [
-    (310, 490),
-(809, 335),
-(1014, 327),
-(1029, 229),
-(1019, 132),
-(925, 135),
-(784, 132),
-(688, 134),
-(614, 130),
-(513, 134), 
-(452, 133),
-(438, 210),
-(438, 255),
-(373, 299),
-(303, 359),
-(310, 418),
-(364, 475),
-(484, 498),
-(635, 517),
-(698, 535),
-(703, 594),
-(703, 656),
-(710, 689),
-(766, 707),
+    (367, 110),
+     (452, 105),
+     (539, 97),
+     (691, 97),
+     (844, 99),
+     (1001, 108),
+     (1007, 211),
+     (1007, 308),
+     (870, 300),
+     (742, 305),
+     (570, 291),
+     (412, 298),
+     (406, 400),
+     (416, 476),
+     (531, 478),
+     (658, 506),
+     (744, 564),
+     (811, 639),
 ]
+
+ 
 
 # (310, 490),
 # (809, 335),
@@ -105,6 +101,26 @@ FLOOR_WAYPOINTS = [
 # (703, 656),
 # (710, 689),
 # (766, 707),
+
+# (779, 478),
+# (553, 488),
+# (407, 475),
+# (384, 293),
+# (381, 105),
+# (570, 82),
+# (662, 97),
+# (848, 110),
+# (947, 109),
+# (1004, 111),
+# (1012, 226),
+# (995, 288),
+# (764, 317),
+# (599, 302),
+# (342, 323),
+# (278, 400),
+# (191, 464),
+# (850, 672),
+
 
 
 class ResponiveAgent:
@@ -137,7 +153,7 @@ class ResponiveAgent:
         self.path_queue = []                 # Vector2 targets to visit in order
 
     def call(self):
-        """Show custom selection buttons in the bottom-left blue area."""
+        """Show custom selection buttons in the bottom-right blue area."""
         if self.is_delivering or not self.held_items:
             return
 
@@ -440,15 +456,15 @@ BackGround = Background('assests/bigfloorv3.png', [0, 0])
 sprite_list = pygame.sprite.LayeredUpdates()
 
 plate = Sprite(pygame.Vector2(357,644), 100, 75, "platepng.png", name="Plate")
-plate.rect.y = 200
-plate.rect.x = 300
+plate.rect.y = 383
+plate.rect.x = 650
 sprite_list.add(plate)
 sprite_list.change_layer(sprite=plate, new_layer=3)
 
 
 spoon = Sprite(pygame.Vector2(450,654), 60, 60, "spoonpng.png", name="Spoon")
-spoon.rect.x = 300
-spoon.rect.y = 200
+spoon.rect.x = 137
+spoon.rect.y = 7
 sprite_list.add(spoon)
 sprite_list.change_layer(sprite=spoon, new_layer=3)
 
@@ -456,8 +472,8 @@ sprite_list.change_layer(sprite=spoon, new_layer=3)
 # # robot-only zone (x >= 600, y <= 600) so start_drag already refuses to
 # # let the player pull them out directly.
 fork = Sprite(pygame.Vector2(306,651),60, 60, "forkpng.png", name="Fork")
-fork.rect.x = 700
-fork.rect.y = 100
+fork.rect.x = 836
+fork.rect.y = 20
 sprite_list.add(fork)
 sprite_list.change_layer(sprite=fork, new_layer=3)
 
@@ -467,42 +483,42 @@ person.rect.y = 100
 sprite_list.add(person)
 sprite_list.change_layer(sprite=person, new_layer=3)
 
-salt = Sprite(pygame.Vector2(306,651),60, 60, "salt.png", name="Salt")
-salt.rect.x = 700
-salt.rect.y = 100
+salt = Sprite(pygame.Vector2(389,600),30, 40, "salt.png", name="Salt")
+salt.rect.x = 447
+salt.rect.y = 19
 sprite_list.add(salt)
 sprite_list.change_layer(sprite=salt, new_layer=3)
 
 
 knife = Sprite(pygame.Vector2(430,654),60, 60, "knifepng.png", name="Knife")
-knife.rect.x = 800
-knife.rect.y = 100
+knife.rect.x = 1154
+knife.rect.y = 96
 sprite_list.add(knife)
 sprite_list.change_layer(sprite=knife, new_layer=3)
 
-robot = Sprite(pygame.Vector2(200,248),200, 175, "Armature_Idle_00.png", name="Robot")
-robot.rect.x = 100
-robot.rect.y = 100
+robot = Sprite(pygame.Vector2(200,248),150, 120, "Armature_Idle_00.png", name="Robot")
+robot.rect.x = 975
+robot.rect.y = 711
 sprite_list.add(robot)
 sprite_list.change_layer(sprite=robot, new_layer=0)
 
 
 cup = Sprite(pygame.Vector2(521, 173), 50, 50, "cuppng.png", name="Cup")
-cup.rect.x = 500
-cup.rect.y = 475
+cup.rect.x = 211
+cup.rect.y = 11
 sprite_list.add(cup)
 sprite_list.change_layer(sprite=cup, new_layer=3)
 
 napkin = Sprite(pygame.Vector2(308,650), 60,65, "napkinpng.png", name="Napkin")
-napkin.rect.x = 100
-napkin.rect.y = 100
+napkin.rect.x = 10
+napkin.rect.y = 102
 sprite_list.add(napkin)
 sprite_list.change_layer(sprite=napkin, new_layer=2)
 
 
 placemat = Sprite(pygame.Vector2(303,633),200, 100, "placematpng.png", name="Placemat")
-placemat.rect.x = 100
-placemat.rect.y = 100
+placemat.rect.x = 91
+placemat.rect.y = 557
 sprite_list.add(placemat)
 sprite_list.change_layer(sprite=placemat, new_layer=1)
 
@@ -568,6 +584,8 @@ while running:
                         break
 
                 if clicked_sprite:
+                    if clicked_sprite == robot:
+                            agent.call()
                     dragging_sprite = clicked_sprite
                     dragging_sprite.start_drag(event.pos)
                 else:
