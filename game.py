@@ -135,6 +135,7 @@ class ResponiveAgent:
     PHASE_IDLE = "idle"
     PHASE_TO_ITEM = "to_item"
     PHASE_TO_GOAL = "to_goal"
+    PHASE_RETURN_HOME = "return_home"
 
     def __init__(self, held_items, goal_location, menu_manager, robot, waypoints=None, speed=350):
         self.held_items = list(held_items)   # Sprites currently blocked in robot space
@@ -142,6 +143,7 @@ class ResponiveAgent:
         self.menu_manager = menu_manager
         self.speed = speed                   # px/sec for the delivery animation
         self.robot = robot
+        self.start_location = pygame.Vector2(self.robot.rect.topleft)
         self.waypoints = [pygame.Vector2(p) for p in (waypoints or FLOOR_WAYPOINTS)]
 
         self.choice_box = None
@@ -262,10 +264,12 @@ class ResponiveAgent:
         return False
 
     def update(self, dt):
-        if not self.is_delivering or self.active_item is None:
+        if not self.is_delivering:
             return
 
         if self.phase == self.PHASE_TO_ITEM:
+            if self.active_item is None:
+                return
             if self._follow_path(dt):
                 # Grab: keep the item's offset relative to the robot so it rides along
                 self.carry_offset = (
@@ -276,6 +280,8 @@ class ResponiveAgent:
                 self.path_queue = self._build_path(self.goal_location)
 
         elif self.phase == self.PHASE_TO_GOAL:
+            if self.active_item is None:
+                return
             done = self._follow_path(dt)
             self.active_item.rect.topleft = (
                 pygame.Vector2(self.robot.rect.topleft) + self.carry_offset
@@ -283,6 +289,12 @@ class ResponiveAgent:
             if done:
                 self.active_item.rect.topleft = self.goal_location
                 self.active_item = None
+                self.phase = self.PHASE_RETURN_HOME
+                self.path_queue = self._build_path(self.start_location)
+
+        elif self.phase == self.PHASE_RETURN_HOME:
+            done = self._follow_path(dt)
+            if done:
                 self.is_delivering = False
                 self.phase = self.PHASE_IDLE
                 self.path_queue = []
@@ -477,7 +489,7 @@ fork.rect.y = 20
 sprite_list.add(fork)
 sprite_list.change_layer(sprite=fork, new_layer=3)
 
-person = Sprite(pygame.Vector2(306,651),60, 60, "person011.png", name="person")
+person = Sprite(pygame.Vector2(306,651),85, 120, "person011.png", name="person")
 person.rect.x = 300
 person.rect.y = 100
 sprite_list.add(person)
@@ -503,7 +515,7 @@ sprite_list.add(robot)
 sprite_list.change_layer(sprite=robot, new_layer=0)
 
 
-cup = Sprite(pygame.Vector2(521, 173), 50, 50, "cuppng.png", name="Cup")
+cup = Sprite(pygame.Vector2(453, 564), 50, 50, "cuppng.png", name="Cup")
 cup.rect.x = 211
 cup.rect.y = 11
 sprite_list.add(cup)
@@ -538,10 +550,10 @@ menu_manager = MenuManager(screen=screen)
 
 dragging_sprite = None
 
-# goal_location is where delivered items should land, e.g. beside the table
+
 agent = ResponiveAgent(
-    held_items=[fork, knife],
-    goal_location=(750, 700),
+    held_items=[fork, knife, plate],
+    goal_location=(132, 694),
     menu_manager=menu_manager,
     robot=robot,
 )
