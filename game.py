@@ -330,11 +330,21 @@ class Sprite(pygame.sprite.Sprite):
         self.name = name or asset
         self.original_position = pygame.Vector2(self.rect.topleft)
 
+    def show_box(self):
+        return self.popup
+
+    def remember_position(self):
+        """Save the sprite's current position as its spawn position."""
+        self.original_position = pygame.Vector2(self.rect.topleft)
+
+    def send_to_spawn(self):
+        self.rect.topleft = self.original_position
+
     def start_drag(self, mouse_pos: tuple[int, int]) -> None:
         if self.name == "Robot" or self.snapped or (mouse_pos[0] >= 600 and mouse_pos[1] <= 600):
             self.dragging = False
             return
-        self.dragging = True
+        self.dragging = False
         self.original_position = pygame.Vector2(self.rect.topleft)
         self.drag_offset = pygame.Vector2(mouse_pos) - pygame.Vector2(self.rect.topleft)
 
@@ -392,7 +402,7 @@ def can_place_item(item, sprite_group) -> bool:
 
     return True
 
-
+ 
 screen = pygame.display.set_mode((1200, 840))
 PLAYER_BOUNDS = pygame.Rect(0, 0, 1200, 800)
 
@@ -403,12 +413,20 @@ except pygame.error as e:
     print(f"Error loading image: {e}")
     sys.exit()
 
-
 # Helper functin to draw rect
 def draw_alpha_rect(screen, color: pygame.Color, rect):
     surf = pygame.Surface((rect[2], rect[3]), pygame.SRCALPHA)
     surf.fill(color)
     screen.blit(surf, (rect[0], rect[1]))
+
+
+def draw_pickup_area(surface, center, radius):
+    """Show the area in which the player can automatically grab an item."""
+    area = pygame.Surface((radius * 2 + 4, radius * 2 + 4), pygame.SRCALPHA)
+    area_center = pygame.Vector2(radius + 2, radius + 2)
+    pygame.draw.circle(area, (55, 190, 220, 32), area_center, radius)
+    pygame.draw.circle(area, (120, 230, 245, 210), area_center, radius, width=3)
+    surface.blit(area, (center[0] - radius - 2, center[1] - radius - 2))
 
 
 
@@ -537,6 +555,9 @@ placemat.rect.y = 557
 sprite_list.add(placemat)
 sprite_list.change_layer(sprite=placemat, new_layer=1)
 
+for sprite in sprite_list:
+    sprite.remember_position()
+
 
 # table = Sprite(pygame.Vector2(155,198),500, 400, "woodpng.png", name="Table")
 # table.rect.x = 100
@@ -654,8 +675,10 @@ while running:
                     carried_item_offset = pygame.Vector2(0, 0)
                     highlight_rect = None
                 else:
+                    menu_manager.open_menu(carried_item.show_box())
                     carried_item.stop_drag()
                     pickup_blocked_item = carried_item
+                    carried_item.send_to_spawn()
                     carried_item = None
                     carried_item_offset = pygame.Vector2(0, 0)
                     highlight_rect = None
@@ -730,7 +753,7 @@ while running:
 
     # screen.fill((156, 148, 146))
     screen.blit(BackGround.image, BackGround.rect)
-    
+    draw_pickup_area(screen, person.rect.center, PLAYER_PICKUP_RADIUS)
 
     # blues1 = pygame.draw.rect(screen, (0, 0, 255), (0, 600, 1200, 250), width=2, border_radius=-1)
     # pygame.draw.rect(screen, (0, 0, 0), (0, 0, 600, 600), width=2, border_radius=-1)
