@@ -488,8 +488,8 @@ BackGround = Background('assests/bigfloorv3.png', [0, 0])
 sprite_list = pygame.sprite.LayeredUpdates()
 
 plate = Sprite(pygame.Vector2(357,644), 100, 75, "platepng.png", name="Plate")
-plate.rect.y = 383
-plate.rect.x = 650
+plate.rect.y = 391
+plate.rect.x = 521
 sprite_list.add(plate)
 sprite_list.change_layer(sprite=plate, new_layer=3)
 
@@ -511,7 +511,7 @@ sprite_list.change_layer(sprite=fork, new_layer=3)
 
 person = Sprite(pygame.Vector2(306,651),85, 120, "person011.png", name="person")
 person.rect.x = 300
-person.rect.y = 70
+person.rect.y = 150
 sprite_list.add(person)
 sprite_list.change_layer(sprite=person, new_layer=3)
 PLAYER_SPEED = 250
@@ -544,15 +544,15 @@ sprite_list.add(cup)
 sprite_list.change_layer(sprite=cup, new_layer=3)
 
 napkin = Sprite(pygame.Vector2(308,650), 60,65, "napkinpng.png", name="Napkin")
-napkin.rect.x = 812
-napkin.rect.y = 11
+napkin.rect.x = 321
+napkin.rect.y = 10
 sprite_list.add(napkin)
 sprite_list.change_layer(sprite=napkin, new_layer=2)
 
 
 placemat = Sprite(pygame.Vector2(303,633),200, 100, "placematpng.png", name="Placemat")
-placemat.rect.x =750
-placemat.rect.y = 370
+placemat.rect.x =107
+placemat.rect.y =570
 sprite_list.add(placemat)
 sprite_list.change_layer(sprite=placemat, new_layer=1)
 

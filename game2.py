@@ -2,7 +2,6 @@ import pygame
 import math
 import sys
 import os
-import getopt
 from pygamepopup.menu_manager import MenuManager
 from pygamepopup.components import Button, InfoBox
 import pygamepopup
@@ -132,7 +131,7 @@ class ResponiveAgent:
     one makes the robot drive along FLOOR_WAYPOINTS to the item, grab it,
     then follow waypoints to the goal location.
     """
-    
+
     PHASE_IDLE = "idle"
     PHASE_TO_ITEM = "to_item"
     PHASE_TO_GOAL = "to_goal"
@@ -168,17 +167,30 @@ class ResponiveAgent:
         gap = 54
 
         for index, item in enumerate(self.held_items):
-            button = myButton(
-                title=item.name,
-                x=start_x,
-                y=start_y + index * gap,
-                width=button_w,
-                height=button_h,
-                callback=self._make_selector(item),
-                font=font,
-                image_path="Default/button_square_header_small_rectangle_screws.png",
-            )
-            self.choice_buttons.append(button)
+            if index > 2:
+                button = myButton(
+                    title=item.name,
+                    x=start_x + 220 + 40,
+                    y=start_y + (index-2) * gap,
+                    width=button_w,
+                    height=button_h,
+                    callback=self._make_selector(item),
+                    font=font,
+                    image_path="Default/button_square_header_small_rectangle_screws.png",
+                )
+                self.choice_buttons.append(button)
+            else:
+                button = myButton(
+                    title=item.name,
+                    x=start_x,
+                    y=start_y + index * gap,
+                    width=button_w,
+                    height=button_h,
+                    callback=self._make_selector(item),
+                    font=font,
+                    image_path="Default/button_square_header_small_rectangle_screws.png",
+                )
+                self.choice_buttons.append(button)
 
         self.choice_box = True
 
@@ -488,15 +500,15 @@ BackGround = Background('assests/bigfloorv3.png', [0, 0])
 sprite_list = pygame.sprite.LayeredUpdates()
 
 plate = Sprite(pygame.Vector2(357,644), 100, 75, "platepng.png", name="Plate")
-plate.rect.y = 383
-plate.rect.x = 650
+plate.rect.y = 90
+plate.rect.x = 11
 sprite_list.add(plate)
 sprite_list.change_layer(sprite=plate, new_layer=3)
 
 
 spoon = Sprite(pygame.Vector2(450,654), 60, 60, "spoonpng.png", name="Spoon")
-spoon.rect.x = 137
-spoon.rect.y = 7
+spoon.rect.x = 692
+spoon.rect.y = 396
 sprite_list.add(spoon)
 sprite_list.change_layer(sprite=spoon, new_layer=3)
 
@@ -504,29 +516,29 @@ sprite_list.change_layer(sprite=spoon, new_layer=3)
 # # robot-only zone (x >= 600, y <= 600) so start_drag already refuses to
 # # let the player pull them out directly.
 fork = Sprite(pygame.Vector2(306,651),60, 60, "forkpng.png", name="Fork")
-fork.rect.x = 33
-fork.rect.y = 112
+fork.rect.x = 715
+fork.rect.y = 396
 sprite_list.add(fork)
 sprite_list.change_layer(sprite=fork, new_layer=3)
 
 person = Sprite(pygame.Vector2(306,651),85, 120, "person011.png", name="person")
 person.rect.x = 300
-person.rect.y = 70
+person.rect.y = 100
 sprite_list.add(person)
 sprite_list.change_layer(sprite=person, new_layer=3)
 PLAYER_SPEED = 250
 PLAYER_PICKUP_RADIUS = 90
 
 salt = Sprite(pygame.Vector2(389,600),30, 40, "salt.png", name="Salt")
-salt.rect.x = 447
-salt.rect.y = 19
+salt.rect.x = 1053
+salt.rect.y = 20
 sprite_list.add(salt)
 sprite_list.change_layer(sprite=salt, new_layer=3)
 
 
 knife = Sprite(pygame.Vector2(430,654),60, 60, "knifepng.png", name="Knife")
-knife.rect.x = 505
-knife.rect.y = 16
+knife.rect.x = 1154
+knife.rect.y = 96
 sprite_list.add(knife)
 sprite_list.change_layer(sprite=knife, new_layer=3)
 
@@ -538,21 +550,21 @@ sprite_list.change_layer(sprite=robot, new_layer=0)
 
 
 cup = Sprite(pygame.Vector2(453, 564), 50, 50, "cuppng.png", name="Cup")
-cup.rect.x = 211
-cup.rect.y = 11
+cup.rect.x = 812
+cup.rect.y = 12
 sprite_list.add(cup)
 sprite_list.change_layer(sprite=cup, new_layer=3)
 
 napkin = Sprite(pygame.Vector2(308,650), 60,65, "napkinpng.png", name="Napkin")
-napkin.rect.x = 812
-napkin.rect.y = 11
+napkin.rect.x = 137
+napkin.rect.y = 7
 sprite_list.add(napkin)
 sprite_list.change_layer(sprite=napkin, new_layer=2)
 
 
 placemat = Sprite(pygame.Vector2(303,633),200, 100, "placematpng.png", name="Placemat")
-placemat.rect.x =750
-placemat.rect.y = 370
+placemat.rect.x = 91
+placemat.rect.y = 557
 sprite_list.add(placemat)
 sprite_list.change_layer(sprite=placemat, new_layer=1)
 
@@ -573,224 +585,202 @@ textSurfaceObj = font.render('some text', True, (240,240,240), (115,117,117))
 
 menu_manager = MenuManager(screen=screen)
 
-
-def main():
-
-    dragging_sprite = None
-    carried_item = None
-    carried_item_offset = pygame.Vector2(0, 0)
-    pickup_blocked_item = None
+dragging_sprite = None
+carried_item = None
+carried_item_offset = pygame.Vector2(0, 0)
+pickup_blocked_item = None
 
 
-    agent = ResponiveAgent(
-        held_items=[napkin, placemat, plate],
-        goal_location=(132, 694),
-        menu_manager=menu_manager,
-        robot=robot,
-    )
+agent = ResponiveAgent(
+    held_items=[fork, knife, cup, salt, spoon],
+    goal_location=(132, 694),
+    menu_manager=menu_manager,
+    robot=robot,
+)
 
-    Notibox = InfoBox(
-        "Robot Space access only",
-        [[]],
-        element_linked=pygame.Rect(600, 0, 600, 600),
-        position=(600, 200),
-        width=600,
-        has_close_button=False,
-    )
+Notibox = InfoBox(
+    "Robot Space access only",
+    [[]],
+    element_linked=pygame.Rect(600, 0, 600, 600),
+    position=(600, 200),
+    width=600,
+    has_close_button=False,
+)
 
+running = True
+clock = pygame.time.Clock()
+highlight_rect = None
+highlight_color = pygame.Color(0, 220, 0, 50)
 
+while running:
+    dt = clock.tick(60) / 1000  # seconds since last frame, needed for agent movement speed
 
-    running = True
-    clock = pygame.time.Clock()
-    highlight_rect = None
-    highlight_color = pygame.Color(0, 220, 0, 50)
-
-    while running:
-        dt = clock.tick(60) / 1000  # seconds since last frame, needed for agent movement speed
-
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                print(f"Mouse clicked at: {event.pos}")
-                if agent.is_menu_open:
-                    for button in agent.choice_buttons:
-                        if button.handle_event(event):
-                            break
-                    else:
-                        menu_manager.click(event.button, event.pos)
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            print(f"Mouse clicked at: {event.pos}")
+            if agent.is_menu_open:
+                for button in agent.choice_buttons:
+                    if button.handle_event(event):
+                        break
                 else:
-                    clicked_sprite = None
-                    for sprite in sprite_list:
-                        if sprite in {person, robot} or getattr(sprite, "snapped", False):
-                            continue
-                        if sprite.rect.collidepoint(event.pos):
-                            clicked_sprite = sprite
-                            break
-
-                    if clicked_sprite:
-                        if clicked_sprite == robot:
-                                agent.call()
-                        dragging_sprite = clicked_sprite
-                        dragging_sprite.start_drag(event.pos)
-                    else:
-                        menu_manager.click(event.button, event.pos)
-            elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-                if dragging_sprite:
-                    was_dragging = dragging_sprite.dragging
-                    dragging_sprite.stop_drag()
-                    highlight_rect = None
-                    highlight_color = pygame.Color(0,0,0,0)
-                    print(f"{dragging_sprite.name} final position: ({dragging_sprite.rect.x}, {dragging_sprite.rect.y})")
-                    if was_dragging and not dragging_sprite.snapped:
-                        carried_item = dragging_sprite
-                        carried_item_offset = (
-                            pygame.Vector2(carried_item.rect.center)
-                            - pygame.Vector2(person.rect.center)
-                        )
-                    dragging_sprite = None
-            elif event.type == pygame.MOUSEMOTION:
-                if agent.is_menu_open:
-                    for button in agent.choice_buttons:
-                        button.handle_event(event)
-                if dragging_sprite:
-                    if can_place_item(dragging_sprite, sprite_list):
-                        # pygame.draw.rect(screen, pygame.Color(0,220,0,a=0), dragging_sprite.get_rect())
-                        # draw_alpha_rect(screen, pygame.Color(0,220,0,a=50),  dragging_sprite.get_rect())
-                        # pygame.display.flip()
-                        highlight_color = pygame.Color(0, 220, 0, 50)
-                        highlight_rect = dragging_sprite.get_rect()
-                        
-                        print("show green")
-                    elif not can_place_item(dragging_sprite, sprite_list):
-                        highlight_color = pygame.Color(220, 0, 0, 50)
-                        highlight_rect = dragging_sprite.get_rect()
-                        print("show red here")
-                    dragging_sprite.drag(event.pos)
-                if not dragging_sprite and not agent.is_menu_open:
-                    menu_manager.motion(event.pos)
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_c:
-                    agent.call()
-                elif event.key == pygame.K_e and carried_item is not None:
-                    if carried_item.check_stop() and can_place_item(carried_item, sprite_list):
-                        carried_item.rect.topleft = carried_item.goal
-                        carried_item.snapped = True
-                        carried_item.stop_drag()
-                        carried_item = None
-                        carried_item_offset = pygame.Vector2(0, 0)
-                        highlight_rect = None
-                    else:
-                        menu_manager.open_menu(carried_item.show_box())
-                        carried_item.stop_drag()
-                        pickup_blocked_item = carried_item
-                        carried_item.send_to_spawn()
-                        carried_item = None
-                        carried_item_offset = pygame.Vector2(0, 0)
-                        highlight_rect = None
-                elif event.key == pygame.K_ESCAPE:
-                    agent.cancel_choice()
-
-        keys = pygame.key.get_pressed()
-        movement = pygame.Vector2(
-            keys[pygame.K_d] - keys[pygame.K_a],
-            keys[pygame.K_s] - keys[pygame.K_w],
-        )
-        if movement.length_squared() > 0:
-            movement = movement.normalize() * PLAYER_SPEED * dt
-            person.rect.x += round(movement.x)
-            person.rect.y += round(movement.y)
-            out_of_bounds = person.rect.x >= 600 and person.rect.y <= 600
-            person.rect.clamp_ip(PLAYER_BOUNDS)
-
-            if out_of_bounds:
-                person.rect.x -= 100
-
-        person_center = pygame.Vector2(person.rect.center)
-        if pickup_blocked_item is not None:
-            blocked_distance = (
-                pygame.Vector2(pickup_blocked_item.rect.center) - person_center
-            ).length()
-            if blocked_distance > PLAYER_PICKUP_RADIUS + 25:
-                pickup_blocked_item = None
-
-        if carried_item is None and pickup_blocked_item is None:
-            nearby_items = [
-                sprite
-                for sprite in sprite_list
-                if sprite not in {person, robot}
-                and not getattr(sprite, "snapped", False)
-                and (
-                    pygame.Vector2(sprite.rect.center) - person_center
-                ).length() <= PLAYER_PICKUP_RADIUS
-            ]
-            if nearby_items:
-                carried_item = min(
-                    nearby_items,
-                    key=lambda sprite: (
-                        pygame.Vector2(sprite.rect.center) - person_center
-                    ).length_squared(),
-                )
-                carried_item_offset = (
-                    pygame.Vector2(carried_item.rect.center) - person_center
-                )
-
-        if carried_item is not None:
-            carried_item.rect.center = person_center + carried_item_offset
-            highlight_rect = carried_item.get_rect()
-            if can_place_item(carried_item, sprite_list):
-                highlight_color = pygame.Color(0, 220, 0, 50)
+                    menu_manager.click(event.button, event.pos)
             else:
-                highlight_color = pygame.Color(220, 0, 0, 50)
+                clicked_sprite = None
+                for sprite in sprite_list:
+                    if sprite in {person, robot} or getattr(sprite, "snapped", False):
+                        continue
+                    if sprite.rect.collidepoint(event.pos):
+                        clicked_sprite = sprite
+                        break
 
-        agent.update(dt)
-
-        mouse_x, mouse_y = pygame.mouse.get_pos()
-        out_of_bounds = mouse_x >= 600 and mouse_y <= 600
-
-        
-        if out_of_bounds and menu_manager.active_menu is None:
-            menu_manager.open_menu(Notibox)
+                if clicked_sprite:
+                    if clicked_sprite == robot:
+                            agent.call()
+                    dragging_sprite = clicked_sprite
+                    dragging_sprite.start_drag(event.pos)
+                else:
+                    menu_manager.click(event.button, event.pos)
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
             if dragging_sprite:
+                was_dragging = dragging_sprite.dragging
                 dragging_sprite.stop_drag()
+                highlight_rect = None
+                highlight_color = pygame.Color(0,0,0,0)
+                print(f"{dragging_sprite.name} final position: ({dragging_sprite.rect.x}, {dragging_sprite.rect.y})")
+                if was_dragging and not dragging_sprite.snapped:
+                    carried_item = dragging_sprite
+                    carried_item_offset = (
+                        pygame.Vector2(carried_item.rect.center)
+                        - pygame.Vector2(person.rect.center)
+                    )
                 dragging_sprite = None
-        elif not out_of_bounds and menu_manager.active_menu is Notibox:
-            menu_manager.close_active_menu()
+        elif event.type == pygame.MOUSEMOTION:
+            if agent.is_menu_open:
+                for button in agent.choice_buttons:
+                    button.handle_event(event)
+            if dragging_sprite:
+                if can_place_item(dragging_sprite, sprite_list):
+                    # pygame.draw.rect(screen, pygame.Color(0,220,0,a=0), dragging_sprite.get_rect())
+                    # draw_alpha_rect(screen, pygame.Color(0,220,0,a=50),  dragging_sprite.get_rect())
+                    # pygame.display.flip()
+                    highlight_color = pygame.Color(0, 220, 0, 50)
+                    highlight_rect = dragging_sprite.get_rect()
+                    
+                    print("show green")
+                elif not can_place_item(dragging_sprite, sprite_list):
+                    highlight_color = pygame.Color(220, 0, 0, 50)
+                    highlight_rect = dragging_sprite.get_rect()
+                    print("show red here")
+                dragging_sprite.drag(event.pos)
+            if not dragging_sprite and not agent.is_menu_open:
+                menu_manager.motion(event.pos)
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_c:
+                agent.call()
+            elif event.key == pygame.K_e and carried_item is not None:
+                if carried_item.check_stop() and can_place_item(carried_item, sprite_list):
+                    carried_item.rect.topleft = carried_item.goal
+                    carried_item.snapped = True
+                    carried_item.stop_drag()
+                    carried_item = None
+                    carried_item_offset = pygame.Vector2(0, 0)
+                    highlight_rect = None
+                else:
+                    menu_manager.open_menu(carried_item.show_box())
+                    carried_item.stop_drag()
+                    pickup_blocked_item = carried_item
+                    carried_item.send_to_spawn()
+                    carried_item = None
+                    carried_item_offset = pygame.Vector2(0, 0)
+                    highlight_rect = None
+            elif event.key == pygame.K_ESCAPE:
+                agent.cancel_choice()
 
-        # screen.fill((156, 148, 146))
-        screen.blit(BackGround.image, BackGround.rect)
-        draw_pickup_area(screen, person.rect.center, PLAYER_PICKUP_RADIUS)
+    keys = pygame.key.get_pressed()
+    movement = pygame.Vector2(
+        keys[pygame.K_d] - keys[pygame.K_a],
+        keys[pygame.K_s] - keys[pygame.K_w],
+    )
+    if movement.length_squared() > 0:
+        movement = movement.normalize() * PLAYER_SPEED * dt
+        person.rect.x += round(movement.x)
+        person.rect.y += round(movement.y)
+        out_of_bounds = person.rect.x >= 600 and person.rect.y <= 600
+        person.rect.clamp_ip(PLAYER_BOUNDS)
 
-        # blues1 = pygame.draw.rect(screen, (0, 0, 255), (0, 600, 1200, 250), width=2, border_radius=-1)
-        # pygame.draw.rect(screen, (0, 0, 0), (0, 0, 600, 600), width=2, border_radius=-1)
-        pygame.draw.rect(screen, (255, 0, 0), (600, 0, 600, 600), width=2, border_radius=-1)
+        if out_of_bounds:
+            person.rect.x -= 100
 
-        sprite_list.update()
-        sprite_list.draw(screen)
-        if highlight_rect:
-            draw_alpha_rect(screen, highlight_color, highlight_rect)
-        agent.draw_choice_buttons(screen)
-        menu_manager.display()
+    person_center = pygame.Vector2(person.rect.center)
+    if pickup_blocked_item is not None:
+        blocked_distance = (
+            pygame.Vector2(pickup_blocked_item.rect.center) - person_center
+        ).length()
+        if blocked_distance > PLAYER_PICKUP_RADIUS + 25:
+            pickup_blocked_item = None
+
+    if carried_item is None and pickup_blocked_item is None:
+        nearby_items = [
+            sprite
+            for sprite in sprite_list
+            if sprite not in {person, robot}
+            and not getattr(sprite, "snapped", False)
+            and (
+                pygame.Vector2(sprite.rect.center) - person_center
+            ).length() <= PLAYER_PICKUP_RADIUS
+        ]
+        if nearby_items:
+            carried_item = min(
+                nearby_items,
+                key=lambda sprite: (
+                    pygame.Vector2(sprite.rect.center) - person_center
+                ).length_squared(),
+            )
+            carried_item_offset = (
+                pygame.Vector2(carried_item.rect.center) - person_center
+            )
+
+    if carried_item is not None:
+        carried_item.rect.center = person_center + carried_item_offset
+        highlight_rect = carried_item.get_rect()
+        if can_place_item(carried_item, sprite_list):
+            highlight_color = pygame.Color(0, 220, 0, 50)
+        else:
+            highlight_color = pygame.Color(220, 0, 0, 50)
+
+    agent.update(dt)
+
+    mouse_x, mouse_y = pygame.mouse.get_pos()
+    out_of_bounds = mouse_x >= 600 and mouse_y <= 600
+
     
-        pygame.display.flip()
+    if out_of_bounds and menu_manager.active_menu is None:
+        menu_manager.open_menu(Notibox)
+        if dragging_sprite:
+            dragging_sprite.stop_drag()
+            dragging_sprite = None
+    elif not out_of_bounds and menu_manager.active_menu is Notibox:
+        menu_manager.close_active_menu()
 
+    # screen.fill((156, 148, 146))
+    screen.blit(BackGround.image, BackGround.rect)
+    draw_pickup_area(screen, person.rect.center, PLAYER_PICKUP_RADIUS)
 
+    # blues1 = pygame.draw.rect(screen, (0, 0, 255), (0, 600, 1200, 250), width=2, border_radius=-1)
+    # pygame.draw.rect(screen, (0, 0, 0), (0, 0, 600, 600), width=2, border_radius=-1)
+    pygame.draw.rect(screen, (255, 0, 0), (600, 0, 600, 600), width=2, border_radius=-1)
 
+    sprite_list.update()
+    sprite_list.draw(screen)
+    if highlight_rect:
+        draw_alpha_rect(screen, highlight_color, highlight_rect)
+    agent.draw_choice_buttons(screen)
+    menu_manager.display()
+   
+    pygame.display.flip()
 
-if __name__ == "__main__":
-    args = sys.argv[1:]
-    options = "1234:"
-
-    try:
-        arguments, values = getopt.getopt(args, options)
-        option_names = [opt for opt, _ in arguments]
-
-        if "-1" in option_names:
-            print("yea one hit")
-            main()
-
-    except getopt.error as err:
-        print(str(err))
 
 pygame.quit()
 sys.exit()
