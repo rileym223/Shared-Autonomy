@@ -2,7 +2,7 @@ import pygame
 import math
 import sys
 import os
-import getopt
+import argparse
 from pygamepopup.menu_manager import MenuManager
 from pygamepopup.components import Button, InfoBox
 import pygamepopup
@@ -76,6 +76,64 @@ FLOOR_WAYPOINTS = [
      (811, 639),
 ]
 
+LAYOUTS = {
+    "1": {
+        "positions": {
+            "Plate": (650, 383), "Spoon": (137, 7), "Fork": (33, 112),
+            "Person": (300, 70), "Salt": (447, 19), "Knife": (505, 16),
+            "Cup": (211, 11), "Napkin": (812, 11), "Placemat": (750, 370),
+        },
+        "held_items": ("Napkin", "Placemat", "Plate"),
+        "menu_start_y": 650,
+        "menu_rows": 3,
+    },
+    "2": {
+        "positions": {
+            "Plate": (11, 90), "Spoon": (692, 396), "Fork": (715, 396),
+            "Person": (300, 100), "Salt": (1053, 20), "Knife": (1154, 96),
+            "Cup": (812, 12), "Napkin": (137, 7), "Placemat": (91, 557),
+        },
+        "held_items": ("Fork", "Knife", "Cup", "Salt", "Spoon"),
+        "menu_start_y": 650,
+        "menu_rows": 3,
+    },
+    "3": {
+        "positions": {
+            "Plate": (830, 388), "Spoon": (692, 396), "Fork": (715, 396),
+            "Person": (300, 100), "Salt": (1053, 20), "Knife": (1154, 96),
+            "Cup": (812, 12), "Napkin": (1135, 22), "Placemat": (693, 180),
+        },
+        "held_items": ("Fork", "Knife", "Cup", "Napkin", "Spoon", "Placemat", "Salt", "Plate"),
+        "menu_start_y": 600,
+        "menu_rows": 4,
+    },
+    "4": {
+        "positions": {
+            "Plate": (521, 391), "Spoon": (137, 7), "Fork": (33, 112),
+            "Person": (300, 150), "Salt": (447, 19), "Knife": (505, 16),
+            "Cup": (211, 11), "Napkin": (321, 10), "Placemat": (107, 570),
+        },
+        "held_items": ("Napkin", "Placemat", "Plate"),
+        "menu_start_y": 650,
+        "menu_rows": 3,
+    },
+}
+
+
+def get_active_layout():
+    if __name__ != "__main__":
+        return LAYOUTS["1"]
+
+    parser = argparse.ArgumentParser(description="Run the table-setting game.")
+    parser.add_argument("--layout", choices=LAYOUTS, help="starting object layout (1-4)")
+    for layout_id in LAYOUTS:
+        parser.add_argument(f"-{layout_id}", dest="legacy_layout", action="store_const", const=layout_id)
+    arguments = parser.parse_args()
+    return LAYOUTS[arguments.layout or arguments.legacy_layout or "1"]
+
+
+ACTIVE_LAYOUT = get_active_layout()
+
  
 
 # (310, 490),
@@ -138,18 +196,22 @@ class ResponiveAgent:
     PHASE_TO_GOAL = "to_goal"
     PHASE_RETURN_HOME = "return_home"
 
-    def __init__(self, held_items, goal_location, menu_manager, robot, waypoints=None, speed=350):
+    def __init__(
+        self, held_items, menu_manager, robot,
+        waypoints=None, speed=350, menu_start_y=650, menu_rows=3,
+    ):
         self.held_items = list(held_items)   # Sprites currently blocked in robot space
-        self.goal_location = pygame.Vector2(goal_location)
         self.menu_manager = menu_manager
-        self.speed = speed                   # px/sec for the delivery animation
+        self.speed = speed
+        self.menu_start_y = menu_start_y
+        self.menu_rows = menu_rows
         self.robot = robot
         self.start_location = pygame.Vector2(self.robot.rect.topleft)
         self.waypoints = [pygame.Vector2(p) for p in (waypoints or FLOOR_WAYPOINTS)]
 
         self.choice_box = None
         self.choice_buttons = []
-        self.active_item = None              # item currently being delivered
+        self.active_item = None  # item currently being delivered
         self.is_delivering = False
         self.phase = self.PHASE_IDLE
         self.carry_offset = pygame.Vector2(0, 0)
@@ -162,16 +224,17 @@ class ResponiveAgent:
 
         self.choice_buttons = []
         start_x = 700
-        start_y = 650
+        start_y = self.menu_start_y
         button_w = 220
         button_h = 46
         gap = 54
 
         for index, item in enumerate(self.held_items):
+            column, row = divmod(index, self.menu_rows)
             button = myButton(
                 title=item.name,
-                x=start_x,
-                y=start_y + index * gap,
+                x=start_x + column * (button_w + 40),
+                y=start_y + row * gap,
                 width=button_w,
                 height=button_h,
                 callback=self._make_selector(item),
@@ -278,7 +341,10 @@ class ResponiveAgent:
                     - pygame.Vector2(self.robot.rect.topleft)
                 )
                 self.phase = self.PHASE_TO_GOAL
-                self.path_queue = self._build_path(self.goal_location)
+                robot_destination = (
+                    pygame.Vector2(self.active_item.goal) - self.carry_offset
+                )
+                self.path_queue = self._build_path(robot_destination)
 
         elif self.phase == self.PHASE_TO_GOAL:
             if self.active_item is None:
@@ -288,7 +354,8 @@ class ResponiveAgent:
                 pygame.Vector2(self.robot.rect.topleft) + self.carry_offset
             )
             if done:
-                self.active_item.rect.topleft = self.goal_location
+                self.active_item.rect.topleft = self.active_item.goal
+                self.active_item.snapped = True
                 self.active_item = None
                 self.phase = self.PHASE_RETURN_HOME
                 self.path_queue = self._build_path(self.start_location)
@@ -310,7 +377,7 @@ class Sprite(pygame.sprite.Sprite):
         super().__init__()
 
         self.popup = InfoBox(
-            "Item not dropped in the correct sequence action blocked",
+            "Item not dropped in the correct sequence action blocked (error)",
             [[]],
             element_linked = pygame.Rect(0,0,600,600),
             position=(0, 200),
@@ -318,6 +385,17 @@ class Sprite(pygame.sprite.Sprite):
             has_close_button=True,
             background_path="Default/bar_round_large.png"
         )
+
+        self.popup2 = InfoBox(
+                    "Item Placement canceled ",
+                    [[]],
+                    element_linked = pygame.Rect(0,0,600,600),
+                    position=(0, 200),
+                    width=600,
+                    has_close_button=True,
+                    background_path="Default/bar_round_large.png"
+                )
+
         self.snapped = False
         self.snap_radius =15
         self.goal = goal
@@ -333,6 +411,9 @@ class Sprite(pygame.sprite.Sprite):
 
     def show_box(self):
         return self.popup
+
+    def show_box2(self):
+        return self.popup2
 
     def remember_position(self):
         """Save the sprite's current position as its spawn position."""
@@ -488,15 +569,13 @@ BackGround = Background('assests/bigfloorv3.png', [0, 0])
 sprite_list = pygame.sprite.LayeredUpdates()
 
 plate = Sprite(pygame.Vector2(357,644), 100, 75, "platepng.png", name="Plate")
-plate.rect.y = 383
-plate.rect.x = 650
+plate.rect.topleft = ACTIVE_LAYOUT["positions"]["Plate"]
 sprite_list.add(plate)
 sprite_list.change_layer(sprite=plate, new_layer=3)
 
 
 spoon = Sprite(pygame.Vector2(450,654), 60, 60, "spoonpng.png", name="Spoon")
-spoon.rect.x = 137
-spoon.rect.y = 7
+spoon.rect.topleft = ACTIVE_LAYOUT["positions"]["Spoon"]
 sprite_list.add(spoon)
 sprite_list.change_layer(sprite=spoon, new_layer=3)
 
@@ -504,29 +583,25 @@ sprite_list.change_layer(sprite=spoon, new_layer=3)
 # # robot-only zone (x >= 600, y <= 600) so start_drag already refuses to
 # # let the player pull them out directly.
 fork = Sprite(pygame.Vector2(306,651),60, 60, "forkpng.png", name="Fork")
-fork.rect.x = 33
-fork.rect.y = 112
+fork.rect.topleft = ACTIVE_LAYOUT["positions"]["Fork"]
 sprite_list.add(fork)
 sprite_list.change_layer(sprite=fork, new_layer=3)
 
 person = Sprite(pygame.Vector2(306,651),85, 120, "person011.png", name="person")
-person.rect.x = 300
-person.rect.y = 70
+person.rect.topleft = ACTIVE_LAYOUT["positions"]["Person"]
 sprite_list.add(person)
 sprite_list.change_layer(sprite=person, new_layer=3)
 PLAYER_SPEED = 250
 PLAYER_PICKUP_RADIUS = 90
 
 salt = Sprite(pygame.Vector2(389,600),30, 40, "salt.png", name="Salt")
-salt.rect.x = 447
-salt.rect.y = 19
+salt.rect.topleft = ACTIVE_LAYOUT["positions"]["Salt"]
 sprite_list.add(salt)
 sprite_list.change_layer(sprite=salt, new_layer=3)
 
 
 knife = Sprite(pygame.Vector2(430,654),60, 60, "knifepng.png", name="Knife")
-knife.rect.x = 505
-knife.rect.y = 16
+knife.rect.topleft = ACTIVE_LAYOUT["positions"]["Knife"]
 sprite_list.add(knife)
 sprite_list.change_layer(sprite=knife, new_layer=3)
 
@@ -538,21 +613,18 @@ sprite_list.change_layer(sprite=robot, new_layer=0)
 
 
 cup = Sprite(pygame.Vector2(453, 564), 50, 50, "cuppng.png", name="Cup")
-cup.rect.x = 211
-cup.rect.y = 11
+cup.rect.topleft = ACTIVE_LAYOUT["positions"]["Cup"]
 sprite_list.add(cup)
 sprite_list.change_layer(sprite=cup, new_layer=3)
 
 napkin = Sprite(pygame.Vector2(308,650), 60,65, "napkinpng.png", name="Napkin")
-napkin.rect.x = 812
-napkin.rect.y = 11
+napkin.rect.topleft = ACTIVE_LAYOUT["positions"]["Napkin"]
 sprite_list.add(napkin)
 sprite_list.change_layer(sprite=napkin, new_layer=2)
 
 
 placemat = Sprite(pygame.Vector2(303,633),200, 100, "placematpng.png", name="Placemat")
-placemat.rect.x =750
-placemat.rect.y = 370
+placemat.rect.topleft = ACTIVE_LAYOUT["positions"]["Placemat"]
 sprite_list.add(placemat)
 sprite_list.change_layer(sprite=placemat, new_layer=1)
 
@@ -581,12 +653,23 @@ def main():
     carried_item_offset = pygame.Vector2(0, 0)
     pickup_blocked_item = None
 
+    items_by_name = {
+        "Plate": plate,
+        "Spoon": spoon,
+        "Fork": fork,
+        "Salt": salt,
+        "Knife": knife,
+        "Cup": cup,
+        "Napkin": napkin,
+        "Placemat": placemat,
+    }
 
     agent = ResponiveAgent(
-        held_items=[napkin, placemat, plate],
-        goal_location=(132, 694),
+        held_items=[items_by_name[name] for name in ACTIVE_LAYOUT["held_items"]],
         menu_manager=menu_manager,
         robot=robot,
+        menu_start_y=ACTIVE_LAYOUT["menu_start_y"],
+        menu_rows=ACTIVE_LAYOUT["menu_rows"],
     )
 
     Notibox = InfoBox(
@@ -688,6 +771,14 @@ def main():
                         carried_item = None
                         carried_item_offset = pygame.Vector2(0, 0)
                         highlight_rect = None
+                elif event.key ==pygame.K_t and carried_item is not None:
+                    menu_manager.open_menu(carried_item.show_box2())
+                    carried_item.stop_drag()
+                    pickup_blocked_item = carried_item
+                    carried_item.send_to_spawn()
+                    carried_item = None
+                    carried_item_offset = pygame.Vector2(0, 0)
+                    highlight_rect = None
                 elif event.key == pygame.K_ESCAPE:
                     agent.cancel_choice()
 
@@ -778,19 +869,5 @@ def main():
 
 
 if __name__ == "__main__":
-    args = sys.argv[1:]
-    options = "1234:"
-
-    try:
-        arguments, values = getopt.getopt(args, options)
-        option_names = [opt for opt, _ in arguments]
-
-        if "-1" in option_names:
-            print("yea one hit")
-            main()
-
-    except getopt.error as err:
-        print(str(err))
-
-pygame.quit()
-sys.exit()
+    main()
+    pygame.quit()

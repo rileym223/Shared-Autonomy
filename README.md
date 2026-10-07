@@ -31,6 +31,13 @@ python -m pip install -e .
 ``` bash
 python game.py
 ```
+
+Choose one of the four starting layouts with `--layout` (layout 1 is the default):
+
+```bash
+python game.py --layout 2
+```
+
 ## Controls
 
 
