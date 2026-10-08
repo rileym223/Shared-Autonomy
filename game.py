@@ -3,6 +3,11 @@ import math
 import sys
 import os
 import argparse
+import csv
+import json
+import time
+import uuid
+from datetime import datetime, timezone
 from pygamepopup.menu_manager import MenuManager
 from pygamepopup.components import Button, InfoBox
 import pygamepopup
@@ -133,6 +138,393 @@ def get_active_layout():
 
 
 ACTIVE_LAYOUT = get_active_layout()
+ACTIVE_LAYOUT_ID = next(
+    layout_id for layout_id, layout in LAYOUTS.items() if layout is ACTIVE_LAYOUT
+)
+
+DATA_DIR = "study_data"
+IDLE_THRESHOLD_SECONDS = 3.0
+DEBUG_METRICS = False
+
+ITEM_PREREQUISITES = {
+    "Placemat": (),
+    "Plate": ("Placemat",),
+    "Fork": ("Placemat", "Napkin"),
+    "Knife": ("Placemat", "Napkin"),
+    "Spoon": ("Placemat", "Napkin"),
+    "Napkin": ("Placemat",),
+    "Cup": ("Placemat", "Plate"),
+    "Salt": ("Placemat",),
+}
+
+
+def get_unsatisfied_prerequisites(item, sprite_group):
+    sprites_by_name = {sprite.name: sprite for sprite in sprite_group}
+    return [
+        prerequisite
+        for prerequisite in ITEM_PREREQUISITES.get(item.name, ("Placemat",))
+        if prerequisite not in sprites_by_name or not sprites_by_name[prerequisite].snapped
+    ]
+
+
+def check_task_complete(items_by_name):
+    return all(items_by_name[name].snapped for name in ITEM_PREREQUISITES)
+
+
+class GameMetrics:
+    """Collect behavioral study data without owning game behavior."""
+
+    def __init__(self, layout_id, data_dir=DATA_DIR):
+        self.launch_time = time.perf_counter()
+        self.start_time = datetime.now(timezone.utc).isoformat()
+        self.session_id = str(uuid.uuid4())
+        self.layout_id = str(layout_id)
+        self.data_dir = data_dir
+        self.first_action_time = None
+        self.last_meaningful_player_action_time = None
+        self.stop_time = None
+        self.finalized = False
+        self.task_completed = False
+        self.save_error = None
+        self._last_update_time = self.launch_time
+        self._is_player_moving = False
+        self._activity_since_update = False
+        self._idle_episode_start = None
+        self._robot_phase = "idle"
+        self._robot_phase_started_at = self.launch_time
+        self._post_robot_windows = []
+
+        self.summary_counts = {
+            "total_placement_attempts": 0,
+            "total_successful_placements": 0,
+            "total_failed_placements": 0,
+            "total_dependency_errors": 0,
+            "total_cancellations": 0,
+            "robot_call_count": 0,
+            "robot_deliveries": 0,
+        }
+        self.idle_totals = {
+            "total_inactivity_time": 0.0,
+            "total_thresholded_idle_time": 0.0,
+        }
+        self.robot_totals = {
+            "total_active_time": 0.0,
+            "robot_wait_time": 0.0,
+        }
+        self.items = {
+            item_name: {
+                "number_of_failed_attempts": 0,
+                "number_of_dependency_blocks": 0,
+                "successful": False,
+            }
+            for item_name in ITEM_PREREQUISITES
+        }
+
+        self._debug_metric("SESSION_START", self.launch_time)
+
+    def _debug_metric(self, metric_name, now=None, item_name=None, **details):
+        if DEBUG_METRICS:
+            label = f": {item_name}" if item_name else ""
+            if metric_name == "IDLE_END":
+                print(f"[METRICS] Idle end: {details.get('duration', 0.0):.2f}s")
+            else:
+                print(f"[METRICS] {metric_name.replace('_', ' ').title()}{label}")
+
+    def _finish_idle_episode(self, now):
+        if self._idle_episode_start is None:
+            return
+        duration = max(0.0, now - self._idle_episode_start)
+        self.idle_totals["total_thresholded_idle_time"] += duration
+        self._debug_metric("IDLE_END", now, duration=duration)
+        self._idle_episode_start = None
+
+    def _mark_activity(self, event_type, item_name=None, now=None, log_event=True):
+        if self.finalized:
+            return
+        now = time.perf_counter() if now is None else now
+        if self.first_action_time is None:
+            self.first_action_time = now
+            self._debug_metric("TASK_FIRST_ACTION", now, action=event_type)
+        elif self.last_meaningful_player_action_time is not None:
+            gap = max(0.0, now - self.last_meaningful_player_action_time)
+            self.idle_totals["total_inactivity_time"] += gap
+            self._finish_idle_episode(now)
+
+        self.last_meaningful_player_action_time = now
+        self._activity_since_update = True
+        for window in self._post_robot_windows:
+            if window["latency"] is None and now >= window["completed_at"]:
+                window["latency"] = now - window["completed_at"]
+        if log_event:
+            self._debug_metric(event_type, now, item_name=item_name)
+
+    def record_item_interaction(self, item, now=None):
+        now = time.perf_counter() if now is None else now
+        self._mark_activity("ITEM_INTERACTION", item.name, now)
+
+    def record_robot_zone_attempt(self, item, position, now=None):
+        now = time.perf_counter() if now is None else now
+        self._mark_activity("ROBOT_ZONE_ACCESS_ATTEMPT", item.name, now, log_event=False)
+        self._debug_metric(
+            "ROBOT_ZONE_ACCESS_ATTEMPT", now, item.name,
+            position=[int(position[0]), int(position[1])],
+        )
+
+    def record_pickup(self, item, now=None):
+        now = time.perf_counter() if now is None else now
+        self._mark_activity("ITEM_PICKUP", item.name, now)
+
+    def record_placement_attempt(self, item, actor, unsatisfied_prerequisites=(), now=None):
+        now = time.perf_counter() if now is None else now
+        item_data = self.items[item.name]
+        self._mark_activity("PLACEMENT_ATTEMPT", item.name, now, log_event=False)
+        self.summary_counts["total_placement_attempts"] += 1
+        if unsatisfied_prerequisites and actor == "human":
+            item_data["number_of_dependency_blocks"] += 1
+            self.summary_counts["total_dependency_errors"] += 1
+            self._debug_metric(
+                "DEPENDENCY_BLOCK", now, item.name,
+                unsatisfied_prerequisites=list(unsatisfied_prerequisites),
+            )
+        self._debug_metric("PLACEMENT_ATTEMPT", now, item.name, actor=actor)
+
+    def record_placement_failure(self, item, actor, unsatisfied_prerequisites=(), now=None):
+        now = time.perf_counter() if now is None else now
+        item_data = self.items[item.name]
+        item_data["number_of_failed_attempts"] += 1
+        self.summary_counts["total_failed_placements"] += 1
+        self._debug_metric(
+            "PLACEMENT_FAILED", now, item.name,
+            actor=actor,
+            unsatisfied_prerequisites=list(unsatisfied_prerequisites),
+        )
+
+    def record_placement_success(self, item, actor, now=None):
+        now = time.perf_counter() if now is None else now
+        item_data = self.items[item.name]
+        if item_data["successful"]:
+            return
+        item_data["successful"] = True
+        self.summary_counts["total_successful_placements"] += 1
+        self._debug_metric("PLACEMENT_SUCCESS", now, item.name, actor=actor)
+        if actor == "robot":
+            self.summary_counts["robot_deliveries"] += 1
+            self._post_robot_windows.append({
+                "completed_at": now,
+                "latency": None,
+            })
+            self._debug_metric("ROBOT_DELIVERY_COMPLETE", now, item.name)
+
+    def record_cancellation(self, item=None, source="item", now=None):
+        now = time.perf_counter() if now is None else now
+        item_name = item.name if item is not None else None
+        self._mark_activity("CANCELLATION", item_name, now, log_event=False)
+        self.summary_counts["total_cancellations"] += 1
+        self._debug_metric("CANCELLATION", now, item_name, source=source)
+
+    def record_robot_call(self, now=None):
+        now = time.perf_counter() if now is None else now
+        self._mark_activity("ROBOT_CALL", now=now, log_event=False)
+        self.summary_counts["robot_call_count"] += 1
+        self._debug_metric("ROBOT_CALL", now)
+
+    def record_robot_selection(self, item, now=None):
+        now = time.perf_counter() if now is None else now
+        self._debug_metric("ROBOT_ITEM_SELECTION", now, item.name, actor="robot")
+        self.record_placement_attempt(item, "robot", now=now)
+
+    def record_robot_phase(self, phase, now=None):
+        now = time.perf_counter() if now is None else now
+        if phase == self._robot_phase:
+            return
+        self._close_robot_phase(now)
+        self._robot_phase = phase
+        self._robot_phase_started_at = now
+        self._debug_metric("ROBOT_PHASE_START", now, phase=phase)
+
+    def _close_robot_phase(self, now):
+        if self._robot_phase == "idle":
+            return
+        duration = max(0.0, now - self._robot_phase_started_at)
+        self.robot_totals["total_active_time"] += duration
+
+    def record_frame(self, now=None, player_moving=False):
+        if self.finalized:
+            return
+        now = time.perf_counter() if now is None else now
+        frame_duration = max(0.0, now - self._last_update_time)
+        if player_moving:
+            if not self._is_player_moving:
+                self._mark_activity("PLAYER_MOVEMENT_START", now=now)
+            else:
+                self.last_meaningful_player_action_time = now
+                self._activity_since_update = True
+            self._is_player_moving = True
+        else:
+            self._is_player_moving = False
+
+        if self._robot_phase != "idle" and not self._activity_since_update:
+            self.robot_totals["robot_wait_time"] += frame_duration
+        self._update_idle(now)
+        self._activity_since_update = False
+        self._last_update_time = now
+
+    def _update_idle(self, now):
+        last_action = self.last_meaningful_player_action_time
+        if last_action is None:
+            return
+        inactivity_duration = max(0.0, now - last_action)
+        if inactivity_duration > IDLE_THRESHOLD_SECONDS and self._idle_episode_start is None:
+            self._idle_episode_start = last_action + IDLE_THRESHOLD_SECONDS
+            self._debug_metric("IDLE_START", self._idle_episode_start)
+
+    def record_drag_motion(self, now=None):
+        if self.finalized:
+            return
+        now = time.perf_counter() if now is None else now
+        self._mark_activity("ITEM_DRAG_MOTION", now=now, log_event=False)
+
+    def finalize(self, completed=False, now=None):
+        if self.finalized:
+            return
+        now = time.perf_counter() if now is None else now
+        self.task_completed = bool(completed)
+        if self.task_completed:
+            self._debug_metric("TASK_COMPLETE", now)
+        else:
+            self._debug_metric("SESSION_END", now, reason="window_closed")
+        if self.last_meaningful_player_action_time is not None:
+            gap = max(0.0, now - self.last_meaningful_player_action_time)
+            self.idle_totals["total_inactivity_time"] += gap
+            self._finish_idle_episode(now)
+        self._close_robot_phase(now)
+        self.stop_time = now
+        self.finalized = True
+        self._save()
+
+    def _summary(self):
+        end = self.stop_time if self.stop_time is not None else time.perf_counter()
+        total_task_time = max(0.0, end - self.launch_time)
+        time_to_first_action = (
+            max(0.0, self.first_action_time - self.launch_time)
+            if self.first_action_time is not None else None
+        )
+        active_task_time = 0.0
+        if self.first_action_time is not None:
+            active_task_time = max(
+                0.0,
+                end - self.first_action_time - self.idle_totals["total_inactivity_time"],
+            )
+        placement_accuracy = (
+            self.summary_counts["total_successful_placements"]
+            / self.summary_counts["total_placement_attempts"]
+            if self.summary_counts["total_placement_attempts"] else None
+        )
+        post_latencies = [
+            window["latency"]
+            for window in self._post_robot_windows
+            if window["latency"] is not None
+        ]
+        return {
+            "session_id": self.session_id,
+            "layout_id": self.layout_id,
+            "start_time": self.start_time,
+            "task_completed": self.task_completed,
+            "total_task_time": total_task_time,
+            "active_task_time": active_task_time,
+            "time_to_first_action": time_to_first_action,
+            "total_placement_attempts": self.summary_counts["total_placement_attempts"],
+            "total_successful_placements": self.summary_counts["total_successful_placements"],
+            "total_failed_placements": self.summary_counts["total_failed_placements"],
+            "placement_accuracy": placement_accuracy,
+            "total_dependency_blocks": self.summary_counts["total_dependency_errors"],
+            "dependency_blocks_per_item": {
+                name: data["number_of_dependency_blocks"] for name, data in self.items.items()
+            },
+            "total_cancellations": self.summary_counts["total_cancellations"],
+            "thresholded_idle_time": self.idle_totals["total_thresholded_idle_time"],
+            "robot_call_count": self.summary_counts["robot_call_count"],
+            "robot_deliveries": self.summary_counts["robot_deliveries"],
+            "robot_wait_time": self.robot_totals["robot_wait_time"],
+            "total_robot_active_time": self.robot_totals["total_active_time"],
+            "post_robot_engagement_latency_mean": self._mean(post_latencies),
+        }
+
+    @staticmethod
+    def _mean(values):
+        observed = [value for value in values if value is not None]
+        return sum(observed) / len(observed) if observed else None
+
+    def _save(self):
+        try:
+            os.makedirs(self.data_dir, exist_ok=True)
+            summary = self._summary()
+            items = {
+                name: {
+                    "number_of_failed_attempts": data["number_of_failed_attempts"],
+                    "number_of_dependency_blocks": data["number_of_dependency_blocks"],
+                }
+                for name, data in self.items.items()
+            }
+            result = {"summary": summary}
+            json_path = os.path.join(
+                self.data_dir,
+                f"study_session_{self.session_id}_layout{self.layout_id}.json",
+            )
+            with open(json_path, "w", encoding="utf-8") as output:
+                json.dump(result, output, indent=2)
+                output.flush()
+            self._append_csv(
+                os.path.join(self.data_dir, "study_summary.csv"),
+                summary,
+            )
+            item_rows = []
+            for item_name, item_data in items.items():
+                item_rows.append({
+                    "session_id": self.session_id,
+                    "layout_id": self.layout_id,
+                    "item_name": item_name,
+                    **item_data,
+                })
+            self._append_csv(os.path.join(self.data_dir, "study_items.csv"), item_rows)
+        except Exception as error:
+            self.save_error = str(error)
+
+    @staticmethod
+    def _append_csv(path, rows):
+        if not isinstance(rows, list):
+            rows = [rows]
+        if not rows:
+            return
+        fields = list(dict.fromkeys(key for row in rows for key in row))
+        write_header = not os.path.exists(path) or os.path.getsize(path) == 0
+        if not write_header:
+            with open(path, "r", newline="", encoding="utf-8-sig") as existing:
+                reader = csv.DictReader(existing)
+                existing_fields = reader.fieldnames or []
+                existing_rows = list(reader)
+            if (
+                os.path.basename(path) in {"study_summary.csv", "study_items.csv"}
+                and existing_fields != fields
+            ):
+                with open(path, "w", newline="", encoding="utf-8-sig") as output:
+                    writer = csv.DictWriter(output, fieldnames=fields)
+                    writer.writeheader()
+                    for row in existing_rows:
+                        writer.writerow({key: row.get(key, "") for key in fields})
+            elif existing_fields:
+                fields = existing_fields
+        with open(path, "a", newline="", encoding="utf-8") as output:
+            writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
+            if write_header:
+                writer.writeheader()
+            for row in rows:
+                writer.writerow({
+                    key: json.dumps(value)
+                    if isinstance(value, (dict, list, tuple)) else value
+                    for key, value in row.items()
+                })
+            output.flush()
 
  
 
@@ -198,13 +590,14 @@ class ResponiveAgent:
 
     def __init__(
         self, held_items, menu_manager, robot,
-        waypoints=None, speed=350, menu_start_y=650, menu_rows=3,
+        waypoints=None, speed=350, menu_start_y=650, menu_rows=3, metrics=None,
     ):
         self.held_items = list(held_items)   # Sprites currently blocked in robot space
         self.menu_manager = menu_manager
         self.speed = speed
         self.menu_start_y = menu_start_y
         self.menu_rows = menu_rows
+        self.metrics = metrics
         self.robot = robot
         self.start_location = pygame.Vector2(self.robot.rect.topleft)
         self.waypoints = [pygame.Vector2(p) for p in (waypoints or FLOOR_WAYPOINTS)]
@@ -244,6 +637,8 @@ class ResponiveAgent:
             self.choice_buttons.append(button)
 
         self.choice_box = True
+        if self.metrics:
+            self.metrics.record_robot_call()
 
     def _make_selector(self, item):
         # each button needs its own callback bound to its own item
@@ -252,10 +647,14 @@ class ResponiveAgent:
     def select_item(self, item):
         if item not in self.held_items:
             return
+        if self.metrics:
+            self.metrics.record_robot_selection(item)
         self.held_items.remove(item)
         self.active_item = item
         self.is_delivering = True
         self.phase = self.PHASE_TO_ITEM
+        if self.metrics:
+            self.metrics.record_robot_phase(self.phase)
         self.path_queue = self._build_path(item.rect.topleft)
         self.choice_buttons = []
         self.choice_box = None
@@ -265,6 +664,8 @@ class ResponiveAgent:
             button.draw(surface)
 
     def cancel_choice(self):
+        if self.choice_buttons and self.metrics:
+            self.metrics.record_cancellation(source="robot_menu")
         self.choice_buttons = []
         self.choice_box = None
 
@@ -341,6 +742,8 @@ class ResponiveAgent:
                     - pygame.Vector2(self.robot.rect.topleft)
                 )
                 self.phase = self.PHASE_TO_GOAL
+                if self.metrics:
+                    self.metrics.record_robot_phase(self.phase)
                 robot_destination = (
                     pygame.Vector2(self.active_item.goal) - self.carry_offset
                 )
@@ -356,8 +759,12 @@ class ResponiveAgent:
             if done:
                 self.active_item.rect.topleft = self.active_item.goal
                 self.active_item.snapped = True
+                if self.metrics:
+                    self.metrics.record_placement_success(self.active_item, "robot")
                 self.active_item = None
                 self.phase = self.PHASE_RETURN_HOME
+                if self.metrics:
+                    self.metrics.record_robot_phase(self.phase)
                 self.path_queue = self._build_path(self.start_location)
 
         elif self.phase == self.PHASE_RETURN_HOME:
@@ -365,6 +772,8 @@ class ResponiveAgent:
             if done:
                 self.is_delivering = False
                 self.phase = self.PHASE_IDLE
+                if self.metrics:
+                    self.metrics.record_robot_phase(self.phase)
                 self.path_queue = []
 
     @property
@@ -408,6 +817,7 @@ class Sprite(pygame.sprite.Sprite):
         self.drag_offset = pygame.Vector2(0, 0)
         self.name = name or asset
         self.original_position = pygame.Vector2(self.rect.topleft)
+        self.metrics = None
 
     def show_box(self):
         return self.popup
@@ -423,9 +833,16 @@ class Sprite(pygame.sprite.Sprite):
         self.rect.topleft = self.original_position
 
     def start_drag(self, mouse_pos: tuple[int, int]) -> None:
-        if self.name == "Robot" or self.snapped or (mouse_pos[0] >= 600 and mouse_pos[1] <= 600):
+        if self.name == "Robot" or self.snapped:
             self.dragging = False
             return
+        if mouse_pos[0] >= 600 and mouse_pos[1] <= 600:
+            if self.metrics:
+                self.metrics.record_robot_zone_attempt(self, mouse_pos)
+            self.dragging = False
+            return
+        if self.metrics:
+            self.metrics.record_item_interaction(self)
         self.dragging = False
         self.original_position = pygame.Vector2(self.rect.topleft)
         self.drag_offset = pygame.Vector2(mouse_pos) - pygame.Vector2(self.rect.topleft)
@@ -444,13 +861,24 @@ class Sprite(pygame.sprite.Sprite):
         if not self.dragging:
             return
 
+        previous_position = self.rect.topleft
         self.rect.topleft = pygame.Vector2(mouse_pos) - self.drag_offset
+        if self.rect.topleft != previous_position and self.metrics:
+            self.metrics.record_drag_motion()
         if self.check_stop():
-            if can_place_item(self, sprite_list):
+            unsatisfied = get_unsatisfied_prerequisites(self, sprite_list)
+            allowed = can_place_item(self, sprite_list)
+            if self.metrics:
+                self.metrics.record_placement_attempt(self, "human", unsatisfied)
+            if allowed:
                 self.rect.topleft = self.goal
                 self.snapped = True
                 self.stop_drag()
+                if self.metrics:
+                    self.metrics.record_placement_success(self, "human")
             else:
+                if self.metrics:
+                    self.metrics.record_placement_failure(self, "human", unsatisfied)
                 self.rect.topleft = self.original_position
                 self.stop_drag()
                 menu_manager.open_menu(self.popup)
@@ -462,27 +890,7 @@ class Sprite(pygame.sprite.Sprite):
 
 def can_place_item(item, sprite_group) -> bool:
     """Enforce the placement order for the table-setting task."""
-    if item.name == "Placemat":
-        return True
-
-    placemat = next((sprite for sprite in sprite_group if sprite.name == "Placemat"), None)
-    if placemat is None or not placemat.snapped:
-        return False
-
-    if item.name in {"Plate", "Napkin"}:
-        return True
-
-    if item.name in {"Fork", "Knife", "Spoon"}:
-        napkin = next((sprite for sprite in sprite_group if sprite.name == "Napkin"), None)
-        return napkin is not None and napkin.snapped
-
-    if item.name == "Cup":
-        plate = next((sprite for sprite in sprite_group if sprite.name == "Plate"), None)
-        return plate is not None and plate.snapped
-
-
-
-    return True
+    return not get_unsatisfied_prerequisites(item, sprite_group)
 
  
 screen = pygame.display.set_mode((1200, 840))
@@ -663,6 +1071,9 @@ def main():
         "Napkin": napkin,
         "Placemat": placemat,
     }
+    metrics = GameMetrics(ACTIVE_LAYOUT_ID)
+    for item in (*items_by_name.values(), robot):
+        item.metrics = metrics
 
     agent = ResponiveAgent(
         held_items=[items_by_name[name] for name in ACTIVE_LAYOUT["held_items"]],
@@ -670,6 +1081,7 @@ def main():
         robot=robot,
         menu_start_y=ACTIVE_LAYOUT["menu_start_y"],
         menu_rows=ACTIVE_LAYOUT["menu_rows"],
+        metrics=metrics,
     )
 
     Notibox = InfoBox(
@@ -727,6 +1139,7 @@ def main():
                     print(f"{dragging_sprite.name} final position: ({dragging_sprite.rect.x}, {dragging_sprite.rect.y})")
                     if was_dragging and not dragging_sprite.snapped:
                         carried_item = dragging_sprite
+                        metrics.record_pickup(carried_item)
                         carried_item_offset = (
                             pygame.Vector2(carried_item.rect.center)
                             - pygame.Vector2(person.rect.center)
@@ -756,14 +1169,24 @@ def main():
                 if event.key == pygame.K_c:
                     agent.call()
                 elif event.key == pygame.K_e and carried_item is not None:
+                    unsatisfied = get_unsatisfied_prerequisites(carried_item, sprite_list)
+                    metrics.record_placement_attempt(
+                        carried_item,
+                        "human",
+                        unsatisfied,
+                    )
                     if carried_item.check_stop() and can_place_item(carried_item, sprite_list):
                         carried_item.rect.topleft = carried_item.goal
                         carried_item.snapped = True
+                        metrics.record_placement_success(carried_item, "human")
                         carried_item.stop_drag()
                         carried_item = None
                         carried_item_offset = pygame.Vector2(0, 0)
                         highlight_rect = None
                     else:
+                        metrics.record_placement_failure(
+                            carried_item, "human", unsatisfied
+                        )
                         menu_manager.open_menu(carried_item.show_box())
                         carried_item.stop_drag()
                         pickup_blocked_item = carried_item
@@ -772,6 +1195,7 @@ def main():
                         carried_item_offset = pygame.Vector2(0, 0)
                         highlight_rect = None
                 elif event.key ==pygame.K_t and carried_item is not None:
+                    metrics.record_cancellation(carried_item, source="T_key")
                     menu_manager.open_menu(carried_item.show_box2())
                     carried_item.stop_drag()
                     pickup_blocked_item = carried_item
@@ -787,7 +1211,8 @@ def main():
             keys[pygame.K_d] - keys[pygame.K_a],
             keys[pygame.K_s] - keys[pygame.K_w],
         )
-        if movement.length_squared() > 0:
+        player_moving = movement.length_squared() > 0
+        if player_moving:
             movement = movement.normalize() * PLAYER_SPEED * dt
             person.rect.x += round(movement.x)
             person.rect.y += round(movement.y)
@@ -822,6 +1247,7 @@ def main():
                         pygame.Vector2(sprite.rect.center) - person_center
                     ).length_squared(),
                 )
+                metrics.record_pickup(carried_item)
                 carried_item_offset = (
                     pygame.Vector2(carried_item.rect.center) - person_center
                 )
@@ -835,6 +1261,11 @@ def main():
                 highlight_color = pygame.Color(220, 0, 0, 50)
 
         agent.update(dt)
+
+        now = time.perf_counter()
+        metrics.record_frame(now=now, player_moving=player_moving)
+        if check_task_complete(items_by_name) and not metrics.finalized:
+            metrics.finalize(completed=True, now=now)
 
         mouse_x, mouse_y = pygame.mouse.get_pos()
         out_of_bounds = mouse_x >= 600 and mouse_y <= 600
@@ -865,6 +1296,7 @@ def main():
     
         pygame.display.flip()
 
+    metrics.finalize(completed=check_task_complete(items_by_name))
 
 
 
