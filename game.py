@@ -149,10 +149,10 @@ DEBUG_METRICS = False
 ITEM_PREREQUISITES = {
     "Placemat": (),
     "Plate": ("Placemat",),
-    "Fork": ("Placemat", "Napkin"),
-    "Knife": ("Placemat", "Napkin"),
-    "Spoon": ("Placemat", "Napkin"),
-    "Napkin": ("Placemat",),
+    "Fork": ("Placemat", "Napkin", "Plate"),
+    "Knife": ("Placemat", "Napkin", "Plate"),
+    "Spoon": ("Placemat", "Napkin", "Knife"),
+    "Napkin": ("Placemat", "Plate"),
     "Cup": ("Placemat", "Plate"),
     "Salt": ("Placemat",),
 }
