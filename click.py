@@ -920,6 +920,43 @@ def draw_alpha_rect(screen, color: pygame.Color, rect):
     screen.blit(surf, (rect[0], rect[1]))
 
 
+def draw_prerequisite_highlights(surface, item, sprite_group):
+    """Highlight prerequisites in gold while the hovered item itself is red when blocked."""
+    if item is None or getattr(item, "snapped", False):
+        return
+
+    prerequisites = ITEM_PREREQUISITES.get(item.name, ())
+    sprites_by_name = {sprite.name: sprite for sprite in sprite_group}
+    item_ready = can_place_item(item, sprite_group)
+
+    if not item_ready:
+        outline = pygame.Rect(item.rect.x, item.rect.y, item.rect.width, item.rect.height)
+        pygame.draw.rect(surface, (255, 70, 70, 180), outline, width=4, border_radius=8)
+        draw_alpha_rect(surface, pygame.Color(255, 70, 70, 90), outline)
+
+    if item_ready:
+            outline = pygame.Rect(item.rect.x, item.rect.y, item.rect.width, item.rect.height)
+            pygame.draw.rect(surface, (70, 255, 70, 180), outline, width=4, border_radius=8)
+            draw_alpha_rect(surface, pygame.Color(70, 255, 70, 90), outline)
+
+    if not prerequisites:
+        return
+
+    for prerequisite_name in prerequisites:
+        prerequisite = sprites_by_name.get(prerequisite_name)
+        if prerequisite is None or prerequisite.snapped:
+            continue
+
+        outline = pygame.Rect(
+            prerequisite.rect.x,
+            prerequisite.rect.y,
+            prerequisite.rect.width,
+            prerequisite.rect.height,
+        )
+        pygame.draw.rect(surface, (255, 204, 0, 180), outline, width=4, border_radius=8)
+        draw_alpha_rect(surface, pygame.Color(255, 204, 0, 90), outline)
+
+
 def draw_pickup_area(surface, center, radius):
     """Show the area in which the player can automatically grab an item."""
     area = pygame.Surface((radius * 2 + 4, radius * 2 + 4), pygame.SRCALPHA)
@@ -952,7 +989,12 @@ def draw_item_hover_tooltip(surface, item, mouse_pos, sprite_group):
     else:
         lines.append("  None")
 
-    rendered_lines = [font.render(line, True, (245, 245, 245)) for line in lines]
+    rendered_lines = []
+    for index, line in enumerate(lines):
+        color = (255, 215, 0) if index >= 2 and line.strip().startswith("Prerequisites:") else (245, 245, 245)
+        if index >= 3:
+            color = (245, 245, 0)
+        rendered_lines.append(font.render(line, True, color))
     padding = 10
     box_width = max(line.get_width() for line in rendered_lines) + padding * 2
     box_height = sum(line.get_height() for line in rendered_lines) + padding * 2
@@ -1058,7 +1100,7 @@ person.rect.topleft = ACTIVE_LAYOUT["positions"]["Person"]
 sprite_list.add(person)
 sprite_list.change_layer(sprite=person, new_layer=3)
 PLAYER_SPEED = 250
-PLAYER_PICKUP_RADIUS = 90
+PLAYER_PICKUP_RADIUS = 60
 
 salt = Sprite(pygame.Vector2(389,600),30, 40, "salt.png", name="Salt")
 salt.rect.topleft = ACTIVE_LAYOUT["positions"]["Salt"]
@@ -1274,7 +1316,7 @@ def main():
             movement = movement.normalize() * PLAYER_SPEED * dt
             person.rect.x += round(movement.x)
             person.rect.y += round(movement.y)
-            out_of_bounds = person.rect.x >= 600 and person.rect.y <= 600
+            out_of_bounds = person.rect.x >= 500 and person.rect.y <= 500
             person.rect.clamp_ip(PLAYER_BOUNDS)
 
             if out_of_bounds:
@@ -1349,13 +1391,12 @@ def main():
         sprite_list.draw(screen)
         if highlight_rect:
             draw_alpha_rect(screen, highlight_color, highlight_rect)
-        agent.draw_choice_buttons(screen)
-        menu_manager.display()
 
-        if not agent.is_menu_open and menu_manager.active_menu is None and not dragging_sprite:
+        current_item = dragging_sprite or carried_item
+        if current_item is None and not agent.is_menu_open and menu_manager.active_menu is None:
             mouse_pos = pygame.mouse.get_pos()
             robot_items = set(agent.held_items)
-            hovered_item = next(
+            current_item = next(
                 (
                     sprite
                     for sprite in reversed(sprite_list.sprites())
@@ -1365,8 +1406,17 @@ def main():
                 ),
                 None,
             )
-            if hovered_item is not None:
-                draw_item_hover_tooltip(screen, hovered_item, mouse_pos, sprite_list)
+
+        if current_item is not None:
+            draw_prerequisite_highlights(screen, current_item, sprite_list)
+
+        agent.draw_choice_buttons(screen)
+        menu_manager.display()
+
+        if current_item is not None and not agent.is_menu_open and menu_manager.active_menu is None and dragging_sprite is None:
+            mouse_pos = pygame.mouse.get_pos()
+            if current_item.rect.collidepoint(mouse_pos):
+                draw_item_hover_tooltip(screen, current_item, mouse_pos, sprite_list)
     
         pygame.display.flip()
 
