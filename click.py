@@ -903,7 +903,7 @@ def can_place_item(item, sprite_group) -> bool:
     return not get_unsatisfied_prerequisites(item, sprite_group)
 
  
-screen = pygame.display.set_mode((1200, 840))
+screen = pygame.display.set_mode((1500, 840))
 PLAYER_BOUNDS = pygame.Rect(0, 0, 1200, 800)
 
 try:
@@ -1068,6 +1068,51 @@ class myButton:
                 return True
         return False
 
+
+def build_robot_side_buttons(agent):
+    """Build a static side panel of items the robot can deliver."""
+    if agent is None or agent.is_delivering or not agent.held_items:
+        return []
+
+    buttons = []
+    start_x = 1215
+    start_y = 40
+    button_w = 150
+    button_h = 38
+    gap_x = 12
+    gap_y = 52
+    for index, item in enumerate(agent.held_items):
+        button = myButton(
+            title=item.name,
+            x=start_x,
+            y=start_y + index * gap_y,
+            width=button_w,
+            height=button_h,
+            callback=lambda selected=item: agent.select_item(selected),
+            font=font,
+            image_path="Default/button_square_header_small_rectangle_screws.png",
+        )
+        buttons.append(button)
+    return buttons
+
+
+def draw_robot_side_panel(surface, buttons):
+    """Display a dedicated side HUD with robot-grabbable items."""
+    panel_rect = pygame.Rect(1200, 0, 300, 840)
+    pygame.draw.rect(surface, (20, 28, 40, 230), panel_rect, border_radius=10)
+    pygame.draw.rect(surface, (150, 190, 240, 255), panel_rect, width=2, border_radius=10)
+
+    title = font.render("Robot can grab", True, (240, 240, 240))
+    surface.blit(title, (panel_rect.x + 18, panel_rect.y + 12))
+
+    if not buttons:
+        hint = font.render("No robot items ready", True, (200, 200, 200))
+        surface.blit(hint, (panel_rect.x + 18, panel_rect.y + 60))
+        return
+
+    for button in buttons:
+        button.draw(surface)
+
 # scaled_floor = pygame.transform.scale('assests/floor.png',1200, 850)
 # pygame.image.save(scaled_floor, "scaledfloor.png")
 BackGround = Background('assests/bigfloorv3.png', [0, 0])
@@ -1202,13 +1247,41 @@ def main():
 
     while running:
         dt = clock.tick(60) / 1000  # seconds since last frame, needed for agent movement speed
+        robot_side_buttons = build_robot_side_buttons(agent)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 print(f"Mouse clicked at: {event.pos}")
-                if agent.is_menu_open:
+                if robot_side_buttons:
+                    for button in robot_side_buttons:
+                        if button.handle_event(event):
+                            break
+                    else:
+                        if agent.is_menu_open:
+                            for button in agent.choice_buttons:
+                                if button.handle_event(event):
+                                    break
+                            else:
+                                menu_manager.click(event.button, event.pos)
+                        else:
+                            clicked_sprite = None
+                            for sprite in sprite_list:
+                                if sprite in {person, robot} or getattr(sprite, "snapped", False):
+                                    continue
+                                if sprite.rect.collidepoint(event.pos):
+                                    clicked_sprite = sprite
+                                    break
+
+                            if clicked_sprite:
+                                if clicked_sprite == robot:
+                                        agent.call()
+                                dragging_sprite = clicked_sprite
+                                dragging_sprite.start_drag(event.pos)
+                            else:
+                                menu_manager.click(event.button, event.pos)
+                elif agent.is_menu_open:
                     for button in agent.choice_buttons:
                         if button.handle_event(event):
                             break
@@ -1391,6 +1464,8 @@ def main():
         sprite_list.draw(screen)
         if highlight_rect:
             draw_alpha_rect(screen, highlight_color, highlight_rect)
+
+        draw_robot_side_panel(screen, robot_side_buttons)
 
         current_item = dragging_sprite or carried_item
         if current_item is None and not agent.is_menu_open and menu_manager.active_menu is None:
