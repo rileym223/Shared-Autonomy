@@ -32,6 +32,12 @@ python -m pip install -e .
 python game.py
 ```
 
+Run the tutorial-background can-sorting game with:
+
+```bash
+python tutorial_game.py
+```
+
 Choose one of the four starting layouts with `--layout` (layout 1 is the default):
 
 ```bash
@@ -51,6 +57,7 @@ python game.py --layout 2
 ## Project Files
 
 - `game.py`: Main game program
+- `tutorial_game.py`: Tutorial-background can-sorting game
 - `pyproject.toml`: Python version and dependency configuration
 - `assests/`: Game images
 - `Default/`: UI images

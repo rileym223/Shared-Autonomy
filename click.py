@@ -993,7 +993,16 @@ def draw_item_hover_tooltip(surface, item, mouse_pos, sprite_group):
     for index, line in enumerate(lines):
         color = (255, 215, 0) if index >= 2 and line.strip().startswith("Prerequisites:") else (245, 245, 245)
         if index >= 3:
-            color = (245, 245, 0)
+            prerequisite_index = index - 3
+            if prerequisite_index < len(prerequisites):
+                prerequisite_name = prerequisites[prerequisite_index]
+                color = (
+                    (80, 220, 100)
+                    if satisfied.get(prerequisite_name, False)
+                    else (245, 245, 0)
+                )
+        if index == 1 and item.snapped:
+            color = (80, 220, 100)
         rendered_lines.append(font.render(line, True, color))
     padding = 10
     box_width = max(line.get_width() for line in rendered_lines) + padding * 2
